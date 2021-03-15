@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <avr/io.h>
+#include <string.h>
 #include "unifiedLcd.h"
 
 #define LT_SQ_COL compile(240, 217, 183)
@@ -9,11 +10,30 @@
 #define SQ_SIZE 30
 #define LEFT_OFFST 40
 
+// Numbered constants for piece types
+#define EMPTY 0
+
+#define W_PAWN 1
+#define W_KNIGHT 2
+#define W_BISHOP 3
+#define W_ROOK 4
+#define W_QUEEN 5
+#define W_KING 6
+
+#define B_PAWN 7
+#define B_KNIGHT 8
+#define B_BISHOP 9
+#define B_ROOK 10
+#define B_QUEEN 11
+#define B_KING 12
+
 void draw_board();
 void draw_credits();
+void init_pieces();
 void draw_pieces();
 
-uint64_t bitboard;
+// State of the board
+uint8_t board[BOARD_SIZE][BOARD_SIZE];
 
 int main() {
 
@@ -26,6 +46,8 @@ int main() {
     init_lcd(0);
 
     draw_board();
+    init_pieces();
+    draw_pieces();
     //draw_credits();
 
 }
@@ -74,6 +96,54 @@ void draw_credits() {
 
 }
 
+// [X][Y] NOT [ROW][COL]
+void init_pieces() {
+
+    // Clear board
+    memset(board, EMPTY, sizeof(board));
+
+    // Pawns
+    uint8_t i;
+    for (i = 0; i < BOARD_SIZE; i++) {
+        board[i][1] = B_PAWN;
+        board[i][6] = W_PAWN;
+    }
+
+    // Black pieces
+    board[0][0] = B_ROOK;
+    board[1][0] = B_KNIGHT;
+    board[2][0] = B_BISHOP;
+    board[3][0] = B_QUEEN;
+    board[4][0] = B_KING;
+    board[5][0] = B_BISHOP;
+    board[6][0] = B_KNIGHT;
+    board[7][0] = B_ROOK;
+
+    board[0][7] = W_ROOK;
+    board[1][7] = W_KNIGHT;
+    board[2][7] = W_BISHOP;
+    board[3][7] = W_QUEEN;
+    board[4][7] = W_KING;
+    board[5][7] = W_BISHOP;
+    board[6][7] = W_KNIGHT;
+    board[7][7] = W_ROOK;
+
+}
+
 void draw_pieces() {
+
+    const char* display_pieces = " PNBRQKpnbrqk";
+
+    uint8_t i, j;
+    for (i = 0; i < BOARD_SIZE; i++) {
+        for (j = 0; j < BOARD_SIZE; j++) { 
+            if (board[i][j]) {
+                display_curser_move(LEFT_OFFST + i * SQ_SIZE + 7, j * SQ_SIZE + 7); 
+                display_char(display_pieces[board[i][j]]); 
+            }
+                   
+        }
+    }
+
 
 }
