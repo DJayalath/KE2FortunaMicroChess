@@ -45,41 +45,46 @@ volatile uint8_t sel_x_last = 0;
 volatile uint8_t sel_y_last = 0;
 
 volatile uint8_t redraw_select = 0;
+volatile uint8_t select_enable = 1;
 
 const char* display_pieces = " PNBRQKpnbrqk";
 
 
 ISR(TIMER1_COMPA_vect) {
 
-    if (rotary > 0) {
+    if (select_enable) {
 
-        sel_x_last = sel_x;
-        sel_y_last = sel_y;
+        if (rotary > 0) {
 
-        if (sel_x > 0) {
-            sel_x--;
-        } else {
-            if (sel_y > 0) {
-                sel_y--;
-                sel_x = 7;
+            sel_x_last = sel_x;
+            sel_y_last = sel_y;
+
+            if (sel_x > 0) {
+                sel_x--;
+            } else {
+                if (sel_y > 0) {
+                    sel_y--;
+                    sel_x = 7;
+                }
             }
+            redraw_select = 1;
         }
-        redraw_select = 1;
-    }
-    if (rotary < 0) {
+        if (rotary < 0) {
 
-        sel_x_last = sel_x;
-        sel_y_last = sel_y;
+            sel_x_last = sel_x;
+            sel_y_last = sel_y;
 
-        if (sel_x < 7) {
-            sel_x++;
-        } else {
-            if (sel_y < 7) {
-                sel_y++;
-                sel_x = 0;
+            if (sel_x < 7) {
+                sel_x++;
+            } else {
+                if (sel_y < 7) {
+                    sel_y++;
+                    sel_x = 0;
+                }
             }
+            redraw_select = 1;
         }
-        redraw_select = 1;
+
     }
 
     rotary = 0;
@@ -137,6 +142,40 @@ int main() {
 
             // Renable interrupts
             sei();
+        }
+
+        uint8_t loop = 0;
+        uint8_t last = select_enable;
+
+        // Detect select confirm
+        while (~PINE & _BV(SWC)) {
+
+            cli();
+
+            uint8_t selector = loop ? last : select_enable;
+
+            if (selector) {
+            
+                // Overwrite square
+                draw_square(sel_x, sel_y, GREEN);
+                draw_piece(sel_x, sel_y);
+
+                select_enable = 0;
+
+            } else {
+
+                // Overwrite square
+                draw_square(sel_x, sel_y, TURQUOISE);
+                draw_piece(sel_x, sel_y);
+
+                select_enable = 1;
+
+            }
+
+            sei();
+
+            loop = 1;
+
         }
 
 
@@ -238,4 +277,29 @@ void draw_pieces() {
         }
     }
 
+}
+
+
+// Legal move generator function (note: this is CORRECT and NOT PSEUDO-LEGAL)
+// Expects moves to be an empty two dimensional array representing valid positions on the board
+void gen_moves(uint8_t x, uint8_t y, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
+
+    switch (board[x][y]) {
+
+        // Ok then, idiot.
+        case EMPTY:
+            return;
+        
+        case W_KING:
+
+            // Find black's attacked squares (and look THROUGH the king itself)
+            
+
+            // Find moves the king can make that are NOT attacked and NOT a white piece
+
+
+            return;
+
+
+    }
 }
