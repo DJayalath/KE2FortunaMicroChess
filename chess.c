@@ -4,8 +4,8 @@
 #include "unifiedLcd.h"
 #include "rotary.h"
 
-#define LT_SQ_COL compile(240, 217, 183)
-#define DK_SQ_COL compile(180, 135, 102)
+#define LT_SQ_COL SANDY_BROWN
+#define DK_SQ_COL SADDLE_BROWN
 
 #define BOARD_SIZE 8
 #define SQ_SIZE 30
@@ -108,10 +108,12 @@ int main() {
     // Clock already prescaled so set clock option to 0
     init_lcd(0);
 
+    cli();
+
     draw_board();
     init_pieces();
     draw_pieces();
-    //draw_credits();
+    draw_credits();
 
     sei();
     for (;;) {
@@ -146,38 +148,15 @@ int main() {
 
 void draw_board() {
 
-    rectangle r;
-    uint16_t colour = LT_SQ_COL;
     uint16_t i, j;
 
-
     for (i = 0; i < BOARD_SIZE; i++) {
-        for (j = 1; j < BOARD_SIZE; j++) {
-            
-            r.left = LEFT_OFFST + i * SQ_SIZE;
-            r.right = LEFT_OFFST + (i + 1) * SQ_SIZE;
-            r.top = j * SQ_SIZE - SQ_SIZE;
-            r.bottom = (j + 1) * SQ_SIZE - SQ_SIZE;
+        for (j = 0; j < BOARD_SIZE; j++) {
 
-            fill_rectangle(r, colour);
+            uint16_t col = ((i + j) & 1) ? DK_SQ_COL : LT_SQ_COL;
+            draw_square(i, j, col);
 
-            if (colour == LT_SQ_COL)
-                colour = DK_SQ_COL;
-            else
-                colour = LT_SQ_COL;
         }
-    }
-
-    // Write last row
-    uint8_t k;
-    r.top = BOARD_SIZE * SQ_SIZE - SQ_SIZE;
-    r.bottom = r.top + SQ_SIZE;
-    colour = DK_SQ_COL;
-    for (k = 0; k < BOARD_SIZE; k++) {
-        r.left = LEFT_OFFST + k * SQ_SIZE;
-        r.right = r.left + SQ_SIZE;
-        fill_rectangle(r, colour);
-        colour = (colour == LT_SQ_COL) ? DK_SQ_COL : LT_SQ_COL;
     }
 }
 
@@ -195,8 +174,16 @@ void draw_square(uint8_t x, uint8_t y, uint16_t colour) {
 
 void draw_credits() {
 
-    display_curser_move(LEFT_OFFST, SQ_SIZE * BOARD_SIZE);
-    display_string("Fortuna Chess by Dulhan Jayalath");
+    const char* title = "Fortuna Chess";
+    const char* p = title;
+    uint8_t i = 0;
+
+    while (*p) {
+        display_curser_move(15, 22 + 15 * i);
+        display_char(*p);
+        i++;
+        p++;
+    }
 
 }
 
@@ -246,12 +233,8 @@ void draw_pieces() {
 
     uint8_t i, j;
     for (i = 0; i < BOARD_SIZE; i++) {
-        for (j = 0; j < BOARD_SIZE; j++) { 
-            if (board[i][j]) {
-                display_curser_move(LEFT_OFFST + i * SQ_SIZE + 7, j * SQ_SIZE + 7); 
-                display_char(display_pieces[board[i][j]]); 
-            }
-                   
+        for (j = 0; j < BOARD_SIZE; j++) {
+            draw_piece(i, j);                   
         }
     }
 
