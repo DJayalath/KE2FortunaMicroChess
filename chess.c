@@ -28,6 +28,10 @@
 #define B_QUEEN 11
 #define B_KING 12
 
+#define W_ALL 13
+#define B_ALL 14
+#define WB_ALL 15
+
 void draw_board();
 void draw_credits();
 void init_pieces();
@@ -35,8 +39,47 @@ void draw_pieces();
 void draw_square(uint8_t x, uint8_t y, uint16_t colour);
 void draw_piece(uint8_t x, uint8_t y);
 
-// State of the board
+uint8_t xy_to_rankFile(uint8_t x, uint8_t y);
+uint64_t compute_king(uint64_t king_loc, uint64_t own_side);
+uint8_t dp_to_rf(uint8_t x, uint8_t y);
+void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
+
+
+
+// State of the board as 2D array for easy drawing
 uint8_t board[BOARD_SIZE][BOARD_SIZE];
+
+// State of board as bitboards for efficient computation
+uint64_t bitboards[BOARD_SIZE * BOARD_SIZE];
+
+// Lookup tables
+uint64_t clear_rank[BOARD_SIZE];
+uint64_t mask_rank[BOARD_SIZE];
+uint64_t clear_file[BOARD_SIZE];
+uint64_t mask_file[BOARD_SIZE];
+uint64_t piece[BOARD_SIZE * BOARD_SIZE];
+
+enum {
+    RANK_1,
+    RANK_2,
+    RANK_3,
+    RANK_4,
+    RANK_5,
+    RANK_6,
+    RANK_7,
+    RANK_8
+};
+
+enum {
+    FILE_A,
+    FILE_B,
+    FILE_C,
+    FILE_D,
+    FILE_E,
+    FILE_F,
+    FILE_G,
+    FILE_H
+};
 
 // Selected square
 volatile uint8_t sel_x = 0;
@@ -178,11 +221,48 @@ int main() {
 
         }
 
+        if (select_enable == 0) {
+
+            if (board[sel_x][sel_y] == W_KING) {
+
+                uint64_t val = compute_king(piece[dp_to_rf(sel_x, sel_y)], bitboards[W_ALL]);
+
+                for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+
+                    if (val & piece[i]) {
+
+                        uint8_t y_pos;
+                        uint8_t x_pos;
+
+                        rf_to_dp(i, &x_pos, &y_pos);
+
+                        draw_square(x_pos, y_pos, LIGHT_PINK);
+
+                    }
+
+                }
+
+            }
+
+        }
+
 
     }
     cli();
 
 
+}
+
+// Verified correct.
+uint8_t dp_to_rf(uint8_t x, uint8_t y) {
+    y = BOARD_SIZE - y - 1;
+    return x + y * BOARD_SIZE;
+}
+
+// Verified correct.
+void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y) {
+    *y = BOARD_SIZE - 1 - rf / BOARD_SIZE;
+    *x = rf % BOARD_SIZE;
 }
 
 void draw_board() {
@@ -228,6 +308,68 @@ void draw_credits() {
 
 // [X][Y] NOT [ROW][COL]
 void init_pieces() {
+
+    /* Setup bitboards */
+
+    // RIGHT shift is towards LSB and is equivalent to moving a piece LEFT.
+    // White pieces are nearest LSB.
+    // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
+
+    const uint64_t pawns = 0xEF00;
+    // const uint64_t pawns = 0xFF00;
+    const uint64_t rooks = 0x81;
+    const uint64_t knights = 0x42;
+    const uint64_t bishops = 0x24;
+    const uint64_t queens = 0x8;
+    const uint64_t kings = 0x10;
+
+    // White bitboards
+    bitboards[W_PAWN] =   pawns;
+    bitboards[W_ROOK] =   rooks;
+    bitboards[W_KNIGHT] = knights;
+    bitboards[W_BISHOP] = bishops;
+    bitboards[W_QUEEN] =  queens;
+    bitboards[W_KING] =   kings;
+
+    // Black bitboards
+    bitboards[B_PAWN] =   pawns << 56;
+    bitboards[B_ROOK] =   rooks << 56;
+    bitboards[B_KNIGHT] = knights << 56;
+    bitboards[B_BISHOP] = bishops << 56;
+    bitboards[B_QUEEN] =  queens << 56;
+    bitboards[B_KING] =   kings << 56;
+
+    // All bitboards (remember to keep these updated!)
+    bitboards[W_ALL] = bitboards[W_PAWN] | bitboards[W_ROOK] | bitboards[W_KNIGHT] | bitboards[W_BISHOP] | bitboards[W_QUEEN] | bitboards[W_KING];
+    bitboards[B_ALL] = bitboards[B_PAWN] | bitboards[B_ROOK] | bitboards[B_KNIGHT] | bitboards[B_BISHOP] | bitboards[B_QUEEN] | bitboards[B_KING];
+    bitboards[WB_ALL] = bitboards[W_ALL] | bitboards[B_ALL];
+
+    // Setup lookup tables
+    clear_rank[RANK_1] = ~0xFF;
+    clear_rank[RANK_2] = ~0xFF00;
+    clear_rank[RANK_3] = ~0xFF0000;
+    clear_rank[RANK_4] = ~0xFF000000;
+    clear_rank[RANK_5] = ~0xFF00000000;
+    clear_rank[RANK_6] = ~0xFF0000000000;
+    clear_rank[RANK_7] = ~0xFF000000000000;
+    clear_rank[RANK_8] = ~0xFF00000000000000;
+
+    for (uint8_t i = 0; i < BOARD_SIZE; i++) mask_rank[i] = ~clear_rank[i];
+
+    for (uint8_t i = 0; i < BOARD_SIZE; i++) {
+        for (uint8_t j = 0; j < BOARD_SIZE; j++) {
+            mask_file[i] |= (1 << i) << (j * 8);
+        }
+    }
+
+    for (uint8_t i = 0; i < BOARD_SIZE; i++) clear_file[i] = ~mask_file[i];
+
+    for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+        piece[i] = 1 << i;
+    }
+
+
+    /* Setup display board */
 
     // Clear board
     memset(board, EMPTY, sizeof(board));
@@ -279,27 +421,106 @@ void draw_pieces() {
 
 }
 
+uint64_t compute_king(uint64_t king_loc, uint64_t own_side) {
 
-// Legal move generator function (note: this is CORRECT and NOT PSEUDO-LEGAL)
-// Expects moves to be an empty two dimensional array representing valid positions on the board
-void gen_moves(uint8_t x, uint8_t y, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
+    // Account for file overflow/underflow
+    uint64_t king_clip_h = king_loc & clear_file[FILE_H];
+    uint64_t king_clip_a = king_loc & clear_file[FILE_A];
 
-    switch (board[x][y]) {
+    // If bits (NOT necessarily the piece) are moving right by more than one,
+    // we should clip.
+    uint64_t pos_1 = king_clip_h << 7; // NW
+    uint64_t pos_2 = king_loc << 8; // N
+    uint64_t pos_3 = king_clip_h << 9; // NE
+    uint64_t pos_4 = king_clip_h << 1;
 
-        // Ok then, idiot.
-        case EMPTY:
-            return;
-        
-        case W_KING:
+    uint64_t pos_5 = king_clip_a >> 7;
+    uint64_t pos_6 = king_loc >> 8;
+    uint64_t pos_7 = king_clip_a >> 9;
+    uint64_t pos_8 = king_clip_a >> 1;
 
-            // Find black's attacked squares (and look THROUGH the king itself)
-            
+    uint64_t king_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
 
-            // Find moves the king can make that are NOT attacked and NOT a white piece
+    uint64_t king_valid = king_moves & ~own_side;
 
-
-            return;
-
-
-    }
+    return king_valid;
 }
+
+// uint64_t get_white_bitboard() {
+//     return bitboards[W_PAWN] | bitboards[W_ROOK] | bitboards[W_KNIGHT] | bitboards[W_BISHOP] | bitboards[W_QUEEN] | bitboards[W_KING];
+// }
+
+// uint64_t get_black_bitboard() {
+//     return bitboards[B_PAWN] | bitboards[B_ROOK] | bitboards[B_KNIGHT] | bitboards[B_BISHOP] | bitboards[B_QUEEN] | bitboards[B_KING];
+// }
+
+// uint64_t get_all_bitboard() {
+//     return get_white_bitboard() | get_black_bitboard();
+// }
+
+// // Legal move generator function (note: this is CORRECT and NOT PSEUDO-LEGAL)
+// // Expects moves to be an empty two dimensional array representing valid positions on the board
+// void gen_moves(uint8_t x, uint8_t y, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
+
+//     switch (board[x][y]) {
+
+//         // Ok then, idiot.
+//         case EMPTY:
+//             return;
+        
+//         case W_KING:
+
+//             // Find black's attacked squares (and look THROUGH the king itself)
+            
+//             // Loop board for black pieces
+//             for (uint8_t x = 0; x < BOARD_SIZE; x++) {
+//                 for (uint8_t y = 0; y < BOARD_SIZE; y++) {
+
+//                     // Skip non-black pieces
+//                     if (board[x][y] < B_PAWN) continue;
+
+//                     set_attacked(x, y, t, moves);
+
+
+
+
+//                 }
+//             }
+
+//             // Find moves the king can make that are NOT attacked and NOT a white piece
+
+//             // Mark white pieces
+//             for (uint8_t dx = 0; dx <= 1; dx++) {
+//                 for (uint8_t dy = 0; dy <= 1; dy++) {
+//                     if (x + dx >= 0 && x + dx < BOARD_SIZE && y + dy >= 0 && y + dy < BOARD_SIZE) {
+//                         // It's a white piece
+//                         if (board[x + dx][y + dy] >= 0 && board[x + dx][y + dy] < B_PAWN) {
+//                             moves[x + dx][y + dy] = 1;
+//                         } else if (moves[x + dx][y + dy] == 0) {
+//                             // Legal positions marked with a 2
+//                             moves[x + dx][y + dy] = 2;
+//                         }
+//                     }
+//                 }
+//             }
+
+//             // Loop through board and unmark positions king can't reach
+
+
+//             return;
+
+
+//     }
+// }
+
+// void set_attacked(uint8_t x, uint8_t y, uint8_t t, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
+
+//     switch (t) {
+//         case B_PAWN:
+//             if (x + 1 < BOARD_SIZE && y + 1 < BOARD_SIZE) moves[x + 1][y + 1] = 1;
+//             if (x - 1 >= 0 && y - 1 >= 0 ) moves[x - 1][y - 1] = 1;
+//             break;
+//     }
+
+
+// }
