@@ -44,7 +44,13 @@ uint64_t compute_king(uint64_t king_loc, uint64_t own_side);
 uint8_t dp_to_rf(uint8_t x, uint8_t y);
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
 
+uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
 
+void poll_selector();
+void poll_redraw_selected();
+void poll_move_gen();
+void draw_open_moves();
+void reset_open_moves();
 
 // State of the board as 2D array for easy drawing
 uint8_t board[BOARD_SIZE][BOARD_SIZE];
@@ -58,6 +64,10 @@ uint64_t mask_rank[BOARD_SIZE];
 uint64_t clear_file[BOARD_SIZE];
 uint64_t mask_file[BOARD_SIZE];
 uint64_t piece[BOARD_SIZE * BOARD_SIZE];
+
+// Moves open to player on board
+uint64_t open_moves;
+uint8_t open_valid = 0; // Whether the current open_moves buffer is invalidated or not
 
 enum {
     RANK_1,
@@ -166,91 +176,143 @@ int main() {
     sei();
     for (;;) {
 
-        if (redraw_select) {
-
-            // Disable interrupts (display routine must NOT be disturbed)
-            cli();
-
-            // Redraw last square
-            uint16_t col = ((sel_x_last + sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
-            draw_square(sel_x_last, sel_y_last, col);
-            draw_piece(sel_x_last, sel_y_last);
-
-            // Overwrite new square
-            draw_square(sel_x, sel_y, TURQUOISE);
-            draw_piece(sel_x, sel_y);
-
-            // Set flag to complete!
-            redraw_select = 0;
-
-            // Renable interrupts
-            sei();
-        }
-
-        uint8_t loop = 0;
-        uint8_t last = select_enable;
-
-        // Detect select confirm
-        while (~PINE & _BV(SWC)) {
-
-            cli();
-
-            uint8_t selector = loop ? last : select_enable;
-
-            if (selector) {
-            
-                // Overwrite square
-                draw_square(sel_x, sel_y, GREEN);
-                draw_piece(sel_x, sel_y);
-
-                select_enable = 0;
-
-            } else {
-
-                // Overwrite square
-                draw_square(sel_x, sel_y, TURQUOISE);
-                draw_piece(sel_x, sel_y);
-
-                select_enable = 1;
-
-            }
-
-            sei();
-
-            loop = 1;
-
-        }
-
-        if (select_enable == 0) {
-
-            if (board[sel_x][sel_y] == W_KING) {
-
-                uint64_t val = compute_king(piece[dp_to_rf(sel_x, sel_y)], bitboards[W_ALL]);
-
-                for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
-
-                    if (val & piece[i]) {
-
-                        uint8_t y_pos;
-                        uint8_t x_pos;
-
-                        rf_to_dp(i, &x_pos, &y_pos);
-
-                        draw_square(x_pos, y_pos, LIGHT_PINK);
-
-                    }
-
-                }
-
-            }
-
-        }
-
+        poll_redraw_selected();
+        poll_selector();
+        poll_move_gen();
 
     }
     cli();
 
 
+}
+
+/* Redraws the selected box if a new one is picked */
+void poll_redraw_selected() {
+    if (redraw_select) {
+
+        // Disable interrupts (display routine must NOT be disturbed)
+        cli();
+
+        // Redraw last square
+        uint16_t col = ((sel_x_last + sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
+        draw_square(sel_x_last, sel_y_last, col);
+        draw_piece(sel_x_last, sel_y_last);
+
+        // Overwrite new square
+        draw_square(sel_x, sel_y, TURQUOISE);
+        draw_piece(sel_x, sel_y);
+
+        // Set flag to complete!
+        redraw_select = 0;
+
+        // Renable interrupts
+        sei();
+    }
+}
+
+
+/* Polls the center button flags for selection */
+void poll_selector() {
+
+    uint8_t loop = 0;
+    uint8_t last = select_enable;
+
+    // Detect select confirm
+    while (~PINE & _BV(SWC)) {
+
+        cli();
+
+        uint8_t selector = loop ? last : select_enable;
+
+        if (selector) {
+        
+            // Overwrite square
+            draw_square(sel_x, sel_y, GREEN);
+            draw_piece(sel_x, sel_y);
+
+            select_enable = 0;
+
+            // Invalidate open move buffer
+            open_valid = 0;
+            reset_open_moves();
+
+        } else {
+
+            // Overwrite square
+            draw_square(sel_x, sel_y, TURQUOISE);
+            draw_piece(sel_x, sel_y);
+
+            select_enable = 1;
+
+        }
+
+        loop = 1;
+
+        sei();
+
+    }
+}
+
+/* Computes move generation for the selected piece */
+void poll_move_gen() {
+
+    if (select_enable == 0 && open_valid == 0) {
+
+        uint8_t rf = dp_to_rf(sel_x, sel_y);
+
+        switch(board[sel_x][sel_y]) {
+
+            // OK, Idiot.
+            case EMPTY:
+                return;
+            
+            case W_KING:
+
+                open_moves = compute_king(piece[rf], bitboards[W_ALL]);
+                draw_open_moves();
+                return;
+
+            case W_KNIGHT:
+
+                open_moves = compute_knight(piece[rf], bitboards[W_ALL]);
+                draw_open_moves();
+                return;
+
+        }
+
+        // Validate open move buffer
+        open_valid = 1;
+
+    }
+}
+
+/* Resets the colours of the current open move squares */
+void reset_open_moves() {
+
+    for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+        if (open_moves & piece[i]) {
+            uint8_t y_pos;
+            uint8_t x_pos;
+            rf_to_dp(i, &x_pos, &y_pos);
+            uint16_t col = ((x_pos + y_pos) & 1) ? DK_SQ_COL : LT_SQ_COL;
+            draw_square(x_pos, y_pos, col);
+            draw_piece(x_pos, y_pos);
+        }
+    }
+
+    open_moves = 0;
+}
+
+void draw_open_moves() {
+    for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+        if (open_moves & piece[i]) {
+            uint8_t y_pos;
+            uint8_t x_pos;
+            rf_to_dp(i, &x_pos, &y_pos);
+            draw_square(x_pos, y_pos, LIGHT_PINK);
+            draw_piece(x_pos, y_pos);
+        }
+    }
 }
 
 // Verified correct.
@@ -315,8 +377,8 @@ void init_pieces() {
     // White pieces are nearest LSB.
     // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
 
-    const uint64_t pawns = 0xEF00;
-    // const uint64_t pawns = 0xFF00;
+    // const uint64_t pawns = 0xEF00;
+    const uint64_t pawns = 0xFF00;
     const uint64_t rooks = 0x81;
     const uint64_t knights = 0x42;
     const uint64_t bishops = 0x24;
@@ -441,86 +503,35 @@ uint64_t compute_king(uint64_t king_loc, uint64_t own_side) {
 
     uint64_t king_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
 
-    uint64_t king_valid = king_moves & ~own_side;
-
-    return king_valid;
+    return king_moves & ~own_side;
 }
 
-// uint64_t get_white_bitboard() {
-//     return bitboards[W_PAWN] | bitboards[W_ROOK] | bitboards[W_KNIGHT] | bitboards[W_BISHOP] | bitboards[W_QUEEN] | bitboards[W_KING];
-// }
+uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
 
-// uint64_t get_black_bitboard() {
-//     return bitboards[B_PAWN] | bitboards[B_ROOK] | bitboards[B_KNIGHT] | bitboards[B_BISHOP] | bitboards[B_QUEEN] | bitboards[B_KING];
-// }
+    // Account for file overflow/underflow
+    uint64_t clip_1 = clear_file[FILE_A] & clear_file[FILE_B];
+    uint64_t clip_2 = clear_file[FILE_A];
+    uint64_t clip_3 = clear_file[FILE_H];
+    uint64_t clip_4 = clear_file[FILE_H] & clear_file[FILE_G];
+    uint64_t clip_5 = clear_file[FILE_H] & clear_file[FILE_G];
+    uint64_t clip_6 = clear_file[FILE_H];
+    uint64_t clip_7 = clear_file[FILE_A];
+    uint64_t clip_8 = clear_file[FILE_A] & clear_file[FILE_B];
 
-// uint64_t get_all_bitboard() {
-//     return get_white_bitboard() | get_black_bitboard();
-// }
+    uint64_t pos_1 = (knight_loc & clip_1) << 6;
+    uint64_t pos_2 = (knight_loc & clip_2) << 15;
+    uint64_t pos_3 = (knight_loc & clip_3) << 17;
+    uint64_t pos_4 = (knight_loc & clip_4) << 10;
 
-// // Legal move generator function (note: this is CORRECT and NOT PSEUDO-LEGAL)
-// // Expects moves to be an empty two dimensional array representing valid positions on the board
-// void gen_moves(uint8_t x, uint8_t y, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
+    uint64_t pos_5 = (knight_loc & clip_5) >> 6;
+    uint64_t pos_6 = (knight_loc & clip_6) >> 15;
+    uint64_t pos_7 = (knight_loc & clip_7) >> 17;
+    uint64_t pos_8 = (knight_loc & clip_8) >> 10;
 
-//     switch (board[x][y]) {
+    uint64_t knight_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
 
-//         // Ok then, idiot.
-//         case EMPTY:
-//             return;
-        
-//         case W_KING:
+    return knight_moves & ~own_side;
 
-//             // Find black's attacked squares (and look THROUGH the king itself)
-            
-//             // Loop board for black pieces
-//             for (uint8_t x = 0; x < BOARD_SIZE; x++) {
-//                 for (uint8_t y = 0; y < BOARD_SIZE; y++) {
+    // return 1 << 19;
 
-//                     // Skip non-black pieces
-//                     if (board[x][y] < B_PAWN) continue;
-
-//                     set_attacked(x, y, t, moves);
-
-
-
-
-//                 }
-//             }
-
-//             // Find moves the king can make that are NOT attacked and NOT a white piece
-
-//             // Mark white pieces
-//             for (uint8_t dx = 0; dx <= 1; dx++) {
-//                 for (uint8_t dy = 0; dy <= 1; dy++) {
-//                     if (x + dx >= 0 && x + dx < BOARD_SIZE && y + dy >= 0 && y + dy < BOARD_SIZE) {
-//                         // It's a white piece
-//                         if (board[x + dx][y + dy] >= 0 && board[x + dx][y + dy] < B_PAWN) {
-//                             moves[x + dx][y + dy] = 1;
-//                         } else if (moves[x + dx][y + dy] == 0) {
-//                             // Legal positions marked with a 2
-//                             moves[x + dx][y + dy] = 2;
-//                         }
-//                     }
-//                 }
-//             }
-
-//             // Loop through board and unmark positions king can't reach
-
-
-//             return;
-
-
-//     }
-// }
-
-// void set_attacked(uint8_t x, uint8_t y, uint8_t t, uint8_t moves[BOARD_SIZE][BOARD_SIZE]) {
-
-//     switch (t) {
-//         case B_PAWN:
-//             if (x + 1 < BOARD_SIZE && y + 1 < BOARD_SIZE) moves[x + 1][y + 1] = 1;
-//             if (x - 1 >= 0 && y - 1 >= 0 ) moves[x - 1][y - 1] = 1;
-//             break;
-//     }
-
-
-// }
+}
