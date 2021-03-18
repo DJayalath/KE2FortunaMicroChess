@@ -6,6 +6,7 @@
 
 #define LT_SQ_COL SANDY_BROWN
 #define DK_SQ_COL SADDLE_BROWN
+#define OPN_COL LIGHT_PINK
 
 #define BOARD_SIZE 8
 #define SQ_SIZE 30
@@ -47,6 +48,7 @@ uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
 uint64_t compute_white_pawn(uint64_t pawn_loc);
 uint64_t compute_black_pawn(uint64_t pawn_loc);
 uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side);
+uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side);
 
 void poll_selector();
 void poll_redraw_selected();
@@ -244,6 +246,13 @@ void poll_redraw_selected() {
 
         // Redraw last square
         uint16_t col = ((sel_x_last + sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
+        
+        // If it was a open move square, ensure to use that colour
+        uint8_t rf = dp_to_rf(sel_x_last, sel_y_last);
+        if ((piece[rf] & open_moves) && open_valid) {
+            col = OPN_COL;
+        }
+
         draw_square(sel_x_last, sel_y_last, col);
         draw_piece(sel_x_last, sel_y_last);
 
@@ -334,7 +343,12 @@ void poll_move_gen() {
             case W_ROOK:
                 open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
                 break;
-
+            case B_QUEEN:
+                open_moves = compute_queen(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                break;
+            case W_QUEEN:
+                open_moves = compute_queen(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                break;
             default:
                 break;
 
@@ -369,7 +383,7 @@ void draw_open_moves() {
             uint8_t y_pos;
             uint8_t x_pos;
             rf_to_dp(i, &x_pos, &y_pos);
-            draw_square(x_pos, y_pos, LIGHT_PINK);
+            draw_square(x_pos, y_pos, OPN_COL);
             draw_piece(x_pos, y_pos);
         }
     }
@@ -661,11 +675,9 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     // => We can use masks!
 
     // Memory constraints => we can't use lookup tables here.
-    // Would require 8 * 256 * 8 * 2 = 33kB for all combinations.
+    // Would require 8 * 256 * 8 * 2 = 33kB > 8kB for all combinations.
 
     // We need to stop the ray as soon as it hits the first enemy piece
-
-    uint64_t area = bitboards[WB_ALL];
 
     uint64_t valid = 0;
 
@@ -741,4 +753,108 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     }
 
     return valid;
+}
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+
+uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side) {
+
+    // Trivially compute rook subset of moves
+    uint64_t rook_moves = compute_rook(queen_loc, own_side, enemy_side);
+
+    // Can be sped up (this is repeated computation)
+
+    uint8_t file;
+    for (file = 0; file < BOARD_SIZE; file++) {
+        if (queen_loc & mask_file[file]) break;
+    }
+
+    uint8_t rank;
+    for (rank = 0; rank < BOARD_SIZE; rank++) {
+        if (queen_loc & mask_rank[rank]) break;
+    }
+
+    uint8_t rf = rank * BOARD_SIZE + file;
+    
+    uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
+    uint8_t right_edge = left_edge + BOARD_SIZE - 1;
+
+    uint8_t max_l = file - left_edge;
+    uint8_t max_r = right_edge - file;
+
+    uint8_t h = rank;
+    uint8_t max_d = h;
+    uint8_t max_u = BOARD_SIZE - h - 1;
+
+    uint8_t lim_max = MIN(max_l, max_u);
+    uint8_t tl = (file - lim_max) + (rank + lim_max) * BOARD_SIZE;
+
+    lim_max = MIN(max_r, max_u);
+    uint8_t tr = (file + lim_max) + (rank + lim_max) * BOARD_SIZE;
+
+    lim_max = MIN(max_l, max_d);
+    uint8_t bl = (file - lim_max) + (rank - lim_max) * BOARD_SIZE;
+
+    lim_max = MIN(max_r, max_d);
+    uint8_t br = (file + lim_max) + (rank - lim_max) * BOARD_SIZE;
+
+    uint64_t valid = 0;
+
+    // TL
+    uint8_t p = rf;
+    while ((p + 7) <= tl) {
+        p += 7;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
+
+    // TR
+    p = rf;
+    while ((p + 9) <= tr) {
+        p += 9;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
+
+    // BL
+    p = rf;
+    while ((p - 9) >= bl) {
+        p -= 9;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
+
+    // BR
+    p = rf;
+    while ((p - 7) >= br) {
+        p -= 7;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
+
+    return valid | rook_moves;
 }
