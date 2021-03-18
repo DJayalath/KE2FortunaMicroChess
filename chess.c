@@ -42,10 +42,11 @@ void draw_piece(uint8_t x, uint8_t y);
 uint8_t dp_to_rf(uint8_t x, uint8_t y);
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
 
-uint64_t compute_king(uint64_t king_loc, uint64_t own_side);
+uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side);
 uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
 uint64_t compute_white_pawn(uint64_t pawn_loc);
 uint64_t compute_black_pawn(uint64_t pawn_loc);
+uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side);
 
 void poll_selector();
 void poll_redraw_selected();
@@ -310,10 +311,10 @@ void poll_move_gen() {
                 return;
             
             case B_KING:
-                open_moves = compute_king(piece[rf], bitboards[B_ALL]);
+                open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]);
                 break;
             case W_KING:
-                open_moves = compute_king(piece[rf], bitboards[W_ALL]);
+                open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]);
                 break;
             case B_KNIGHT:
                 open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
@@ -326,6 +327,12 @@ void poll_move_gen() {
                 break;
             case B_PAWN:
                 open_moves = compute_black_pawn(piece[rf]);
+                break;
+            case B_ROOK:
+                open_moves = compute_rook(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                break;
+            case W_ROOK:
+                open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
                 break;
 
             default:
@@ -461,8 +468,8 @@ void init_pieces() {
     // White pieces are nearest LSB.
     // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
 
-    // const uint64_t pawns = 0xCF00;
-    const uint64_t pawns = 0xFF00;
+    const uint64_t pawns = 0x0000;
+    // const uint64_t pawns = 0xFF00;
     const uint64_t rooks = 0x81;
     const uint64_t knights = 0x42;
     const uint64_t bishops = 0x24;
@@ -532,7 +539,9 @@ void init_pieces() {
 }
 
 /* Compute the bitboard of valid moves for a king */
-uint64_t compute_king(uint64_t king_loc, uint64_t own_side) {
+// Incomplete because we are not checking for moves putting us in check, etc.
+// https://peterellisjones.com/posts/generating-legal-chess-moves-efficiently/
+uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side) {
 
     // Account for file overflow/underflow
     uint64_t king_clip_h = king_loc & clear_file[FILE_H];
@@ -640,6 +649,93 @@ uint64_t compute_black_pawn(uint64_t pawn_loc) {
     // -- Combine --
 
     uint64_t valid = valid_moves | valid_att;
+
+    return valid;
+}
+
+/* Compute the bitboard of valid moves for a rook */
+uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side) {
+
+    // Rays are horizontal and vertical
+    // => We can use masks!
+
+    // Memory constraints => we can't use lookup tables here.
+    // Would require 8 * 256 * 8 * 2 = 33kB for all combinations.
+
+    // We need to stop the ray as soon as it hits the first enemy piece
+
+    uint64_t area = bitboards[WB_ALL];
+
+    uint64_t valid = 0;
+
+    uint8_t file;
+    for (file = 0; file < BOARD_SIZE; file++) {
+        if (rook_loc & mask_file[file]) break;
+    }
+
+    uint8_t rank;
+    for (rank = 0; rank < BOARD_SIZE; rank++) {
+        if (rook_loc & mask_rank[rank]) break;
+    }
+
+    // Build upward ray
+    uint8_t p = rank * BOARD_SIZE + file;
+    while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
+        p += 8;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
+
+    // debug_bitboard(valid);
+
+    // for (uint8_t p = rook_loc; p < BOARD_SIZE * BOARD_SIZE; p += 8) {
+    //     if (piece[p] & area & ~piece[rook_loc]) {
+    //         // Check inclusive or exclusive depending on piece colour
+    //         break;
+    //     } else {
+    //         valid |= piece[p];
+    //     }
+    // }
+
+    // // Build downward ray
+    // for (int8_t p = rook_loc; p >= 0; p -= 8) {
+    //     if (piece[p] & area & ~piece[rook_loc]) {
+    //         // Check inclusive or exclusive depending on piece colour
+    //         break;
+    //     } else {
+    //         valid |= piece[p];
+    //     }
+    // }
+
+    // // Build rightward ray
+    // uint8_t p = rook_loc;
+    // for (;;) {
+    //     if (piece[p] & area & ~piece[rook_loc]) {
+    //         break;
+    //     } else {
+    //         valid |= piece[p];
+    //     }
+    //     if (((p + 1) > 64) || ((p + 1) % BOARD_SIZE == 0)) break;
+    //     p++;
+    // }
+
+    // // Build leftward ray
+    // p = rook_loc;
+    // for (;;) {
+    //     if (piece[p] & area & ~piece[rook_loc]) {
+    //         break;
+    //     } else {
+    //         valid |= piece[p];
+    //     }
+    //     if (((p - 1) < 0) || ((p - 1) % BOARD_SIZE == 7)) break;
+    //     p--;
+    // }
 
     return valid;
 }
