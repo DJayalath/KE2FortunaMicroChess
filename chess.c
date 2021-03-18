@@ -709,9 +709,12 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
         }
     }
 
+    uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
+    uint8_t right_edge = left_edge + BOARD_SIZE - 1;
+
     // Build right ray
     p = rf;
-    while (p + 1 % BOARD_SIZE) {
+    while ((p + 1) <= right_edge) {
         p++;
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
@@ -725,8 +728,8 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
 
     // Build left ray (BROKEN)
     p = rf;
-    while (p - 1 % BOARD_SIZE != 7) {
-        p++;
+    while ((p - 1) >= left_edge) {
+        p--;
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
                 valid |= piece[p];
