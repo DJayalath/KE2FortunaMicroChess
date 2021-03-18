@@ -52,6 +52,8 @@ void poll_move_gen();
 void draw_open_moves();
 void reset_open_moves();
 
+void debug_bitboard(uint64_t bb);
+
 // State of the board as 2D array for easy drawing
 uint8_t board[BOARD_SIZE][BOARD_SIZE];
 
@@ -59,10 +61,57 @@ uint8_t board[BOARD_SIZE][BOARD_SIZE];
 uint64_t bitboards[BOARD_SIZE * BOARD_SIZE];
 
 // Lookup tables
-uint64_t clear_rank[BOARD_SIZE];
-uint64_t mask_rank[BOARD_SIZE];
-uint64_t clear_file[BOARD_SIZE];
-uint64_t mask_file[BOARD_SIZE];
+const uint64_t clear_rank[BOARD_SIZE] = {
+    0xFFFFFFFFFFFFFF00,
+    0xFFFFFFFFFFFF00FF,
+    0xFFFFFFFFFF00FFFF,
+    0xFFFFFFFF00FFFFFF,
+    0xFFFFFF00FFFFFFFF,
+    0xFFFF00FFFFFFFFFF,
+    0xFF00FFFFFFFFFFFF,
+    0x00FFFFFFFFFFFFFF
+};
+
+
+const uint64_t mask_rank[BOARD_SIZE] = {
+    0x00000000000000FF,
+    0x000000000000FF00,
+    0x0000000000FF0000,
+    0x00000000FF000000,
+    0x000000FF00000000,
+    0x0000FF0000000000,
+    0x00FF000000000000,
+    0xFF00000000000000
+};
+
+const uint64_t clear_file[BOARD_SIZE] = {
+    0xFEFEFEFEFEFEFEFE,
+    0xFDFDFDFDFDFDFDFD,
+    0xFBFBFBFBFBFBFBFB,
+    0xF7F7F7F7F7F7F7F7,
+
+    0xEFEFEFEFEFEFEFEF,
+    0xDFDFDFDFDFDFDFDF,
+    0xBFBFBFBFBFBFBFBF,
+    0x7F7F7F7F7F7F7F7F
+};
+
+
+const uint64_t mask_file[BOARD_SIZE] = {
+
+    0x0101010101010101,
+    0x0202020202020202,
+    0x0404040404040404,
+    0x0808080808080808,
+
+    0x1010101010101010,
+    0x2020202020202020,
+    0x4040404040404040,
+    0x8080808080808080
+
+};
+
+
 uint64_t piece[BOARD_SIZE * BOARD_SIZE];
 
 // Moves open to player on board
@@ -377,7 +426,7 @@ void init_pieces() {
     // White pieces are nearest LSB.
     // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
 
-    // const uint64_t pawns = 0xEF00;
+    // const uint64_t pawns = 0xCF00;
     const uint64_t pawns = 0xFF00;
     const uint64_t rooks = 0x81;
     const uint64_t knights = 0x42;
@@ -406,30 +455,12 @@ void init_pieces() {
     bitboards[B_ALL] = bitboards[B_PAWN] | bitboards[B_ROOK] | bitboards[B_KNIGHT] | bitboards[B_BISHOP] | bitboards[B_QUEEN] | bitboards[B_KING];
     bitboards[WB_ALL] = bitboards[W_ALL] | bitboards[B_ALL];
 
-    // Setup lookup tables
-    clear_rank[RANK_1] = ~0xFF;
-    clear_rank[RANK_2] = ~0xFF00;
-    clear_rank[RANK_3] = ~0xFF0000;
-    clear_rank[RANK_4] = ~0xFF000000;
-    clear_rank[RANK_5] = ~0xFF00000000;
-    clear_rank[RANK_6] = ~0xFF0000000000;
-    clear_rank[RANK_7] = ~0xFF000000000000;
-    clear_rank[RANK_8] = ~0xFF00000000000000;
-
-    for (uint8_t i = 0; i < BOARD_SIZE; i++) mask_rank[i] = ~clear_rank[i];
-
-    for (uint8_t i = 0; i < BOARD_SIZE; i++) {
-        for (uint8_t j = 0; j < BOARD_SIZE; j++) {
-            mask_file[i] |= (1 << i) << (j * 8);
-        }
+    for (uint64_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+        uint64_t one = 1;
+        piece[i] = one << i;
     }
 
-    for (uint8_t i = 0; i < BOARD_SIZE; i++) clear_file[i] = ~mask_file[i];
-
-    for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
-        piece[i] = 1 << i;
-    }
-
+    // debug_bitboard(piece[28]);
 
     /* Setup display board */
 
@@ -529,9 +560,39 @@ uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
     uint64_t pos_8 = (knight_loc & clip_8) >> 10;
 
     uint64_t knight_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
+    uint64_t knight_valid = knight_moves & ~own_side;
 
-    return knight_moves & ~own_side;
+    char str[8];
+    sprintf(str, "%d", knight_valid);
+    display_string_xy(str, 5, 5);
+
+    return knight_valid;
 
     // return 1 << 19;
+
+}
+
+void debug_bitboard(uint64_t bb) {
+
+    cli();
+
+    for (int i = 0; i < 64; i++) {
+
+        uint8_t x, y;
+        rf_to_dp(i, &x, &y);
+
+        if (bb >> i & 1) {
+
+            draw_square(x, y, WHITE);
+
+        } else {
+
+            draw_square(x, y, GREY);
+        }
+
+    }
+
+    // Enter loop
+    for (;;) {}
 
 }
