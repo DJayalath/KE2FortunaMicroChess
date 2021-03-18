@@ -471,7 +471,8 @@ void init_pieces() {
     const uint64_t pawns = 0x0000;
     // const uint64_t pawns = 0xFF00;
     const uint64_t rooks = 0x81;
-    const uint64_t knights = 0x42;
+    const uint64_t knights = 0x00;
+    // const uint64_t knights = 0x42;
     const uint64_t bishops = 0x24;
     const uint64_t queens = 0x8;
     const uint64_t kings = 0x10;
@@ -678,8 +679,10 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
         if (rook_loc & mask_rank[rank]) break;
     }
 
+    int8_t rf = rank * BOARD_SIZE + file;
+
     // Build upward ray
-    uint8_t p = rank * BOARD_SIZE + file;
+    int8_t p = rf;
     while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
         p += 8;
         if (piece[p] & bitboards[WB_ALL]) {
@@ -692,50 +695,47 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
         }
     }
 
-    // debug_bitboard(valid);
+    // Build downward ray
+    p = rf;
+    while (p - 8 >= 0) {
+        p -= 8;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
 
-    // for (uint8_t p = rook_loc; p < BOARD_SIZE * BOARD_SIZE; p += 8) {
-    //     if (piece[p] & area & ~piece[rook_loc]) {
-    //         // Check inclusive or exclusive depending on piece colour
-    //         break;
-    //     } else {
-    //         valid |= piece[p];
-    //     }
-    // }
+    // Build right ray
+    p = rf;
+    while (p + 1 % BOARD_SIZE) {
+        p++;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
 
-    // // Build downward ray
-    // for (int8_t p = rook_loc; p >= 0; p -= 8) {
-    //     if (piece[p] & area & ~piece[rook_loc]) {
-    //         // Check inclusive or exclusive depending on piece colour
-    //         break;
-    //     } else {
-    //         valid |= piece[p];
-    //     }
-    // }
-
-    // // Build rightward ray
-    // uint8_t p = rook_loc;
-    // for (;;) {
-    //     if (piece[p] & area & ~piece[rook_loc]) {
-    //         break;
-    //     } else {
-    //         valid |= piece[p];
-    //     }
-    //     if (((p + 1) > 64) || ((p + 1) % BOARD_SIZE == 0)) break;
-    //     p++;
-    // }
-
-    // // Build leftward ray
-    // p = rook_loc;
-    // for (;;) {
-    //     if (piece[p] & area & ~piece[rook_loc]) {
-    //         break;
-    //     } else {
-    //         valid |= piece[p];
-    //     }
-    //     if (((p - 1) < 0) || ((p - 1) % BOARD_SIZE == 7)) break;
-    //     p--;
-    // }
+    // Build left ray (BROKEN)
+    p = rf;
+    while (p - 1 % BOARD_SIZE != 7) {
+        p++;
+        if (piece[p] & bitboards[WB_ALL]) {
+            if (piece[p] & enemy_side) {
+                valid |= piece[p];
+            }
+            break;
+        } else {
+            valid |= piece[p];
+        }
+    }
 
     return valid;
 }
