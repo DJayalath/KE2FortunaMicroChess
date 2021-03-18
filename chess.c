@@ -39,12 +39,13 @@ void draw_pieces();
 void draw_square(uint8_t x, uint8_t y, uint16_t colour);
 void draw_piece(uint8_t x, uint8_t y);
 
-uint8_t xy_to_rankFile(uint8_t x, uint8_t y);
-uint64_t compute_king(uint64_t king_loc, uint64_t own_side);
 uint8_t dp_to_rf(uint8_t x, uint8_t y);
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
 
+uint64_t compute_king(uint64_t king_loc, uint64_t own_side);
 uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
+uint64_t compute_white_pawn(uint64_t pawn_loc);
+uint64_t compute_black_pawn(uint64_t pawn_loc);
 
 void poll_selector();
 void poll_redraw_selected();
@@ -151,7 +152,7 @@ volatile uint8_t select_enable = 1;
 
 const char* display_pieces = " PNBRQKpnbrqk";
 
-
+/* Handle rotary encoder changes on timer interrupts */
 ISR(TIMER1_COMPA_vect) {
 
     if (select_enable) {
@@ -224,11 +225,9 @@ int main() {
 
     sei();
     for (;;) {
-
         poll_redraw_selected();
         poll_selector();
         poll_move_gen();
-
     }
     cli();
 
@@ -270,9 +269,7 @@ void poll_selector() {
     while (~PINE & _BV(SWC)) {
 
         cli();
-
         uint8_t selector = loop ? last : select_enable;
-
         if (selector) {
         
             // Overwrite square
@@ -296,7 +293,6 @@ void poll_selector() {
         }
 
         loop = 1;
-
         sei();
 
     }
@@ -304,40 +300,48 @@ void poll_selector() {
 
 /* Computes move generation for the selected piece */
 void poll_move_gen() {
-
     if (select_enable == 0 && open_valid == 0) {
-
         uint8_t rf = dp_to_rf(sel_x, sel_y);
-
         switch(board[sel_x][sel_y]) {
 
             // OK, Idiot.
             case EMPTY:
+                open_valid = 1;
                 return;
             
+            case B_KING:
+                open_moves = compute_king(piece[rf], bitboards[B_ALL]);
+                break;
             case W_KING:
-
                 open_moves = compute_king(piece[rf], bitboards[W_ALL]);
-                draw_open_moves();
-                return;
-
+                break;
+            case B_KNIGHT:
+                open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
+                break;
             case W_KNIGHT:
-
                 open_moves = compute_knight(piece[rf], bitboards[W_ALL]);
-                draw_open_moves();
-                return;
+                break;
+            case W_PAWN:
+                open_moves = compute_white_pawn(piece[rf]);
+                break;
+            case B_PAWN:
+                open_moves = compute_black_pawn(piece[rf]);
+                break;
+
+            default:
+                break;
 
         }
 
+        draw_open_moves();
+
         // Validate open move buffer
         open_valid = 1;
-
     }
 }
 
 /* Resets the colours of the current open move squares */
 void reset_open_moves() {
-
     for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
         if (open_moves & piece[i]) {
             uint8_t y_pos;
@@ -348,10 +352,10 @@ void reset_open_moves() {
             draw_piece(x_pos, y_pos);
         }
     }
-
     open_moves = 0;
 }
 
+/* Draw squares set in the open move buffer */
 void draw_open_moves() {
     for (uint8_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
         if (open_moves & piece[i]) {
@@ -364,56 +368,87 @@ void draw_open_moves() {
     }
 }
 
-// Verified correct.
+/* Convert a square-relative display coordinate into a rank-file index */
 uint8_t dp_to_rf(uint8_t x, uint8_t y) {
     y = BOARD_SIZE - y - 1;
     return x + y * BOARD_SIZE;
 }
 
-// Verified correct.
+/* Convert a rank-file index into a square-relative display coordinate */
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y) {
     *y = BOARD_SIZE - 1 - rf / BOARD_SIZE;
     *x = rf % BOARD_SIZE;
 }
 
+/* Draw all squares on the board */
 void draw_board() {
-
     uint16_t i, j;
-
     for (i = 0; i < BOARD_SIZE; i++) {
         for (j = 0; j < BOARD_SIZE; j++) {
-
             uint16_t col = ((i + j) & 1) ? DK_SQ_COL : LT_SQ_COL;
             draw_square(i, j, col);
-
         }
     }
 }
 
+/* Draw a single square on the board */
 void draw_square(uint8_t x, uint8_t y, uint16_t colour) {
-
     rectangle r;
     r.left = LEFT_OFFST + SQ_SIZE * x;
     r.right = r.left + SQ_SIZE;
     r.top = SQ_SIZE * y;
     r.bottom = r.top + SQ_SIZE; 
-
     fill_rectangle(r, colour);
-
 }
 
-void draw_credits() {
+/* Draw a single piece on the board */
+void draw_piece(uint8_t x, uint8_t y) {
+    if (board[x][y]) {
+        display_curser_move(LEFT_OFFST + x * SQ_SIZE + 7, y * SQ_SIZE + 7); 
+        display_char(display_pieces[board[x][y]]); 
+    }
+}
 
+/* Draw all pieces on the board */
+void draw_pieces() {
+    uint8_t i, j;
+    for (i = 0; i < BOARD_SIZE; i++) {
+        for (j = 0; j < BOARD_SIZE; j++) {
+            draw_piece(i, j);                   
+        }
+    }
+}
+
+/* Draw the title credits */
+void draw_credits() {
     const char* title = "Fortuna Chess";
     const char* p = title;
     uint8_t i = 0;
-
     while (*p) {
         display_curser_move(15, 22 + 15 * i);
         display_char(*p);
         i++;
         p++;
     }
+}
+
+/* Display a bitboard on screen for debugging. */
+// WHITE = 1, GREY = 0
+void debug_bitboard(uint64_t bb) {
+
+    cli();
+    for (int i = 0; i < 64; i++) {
+        uint8_t x, y;
+        rf_to_dp(i, &x, &y);
+        if (bb >> i & 1) {
+            draw_square(x, y, WHITE);
+        } else {
+            draw_square(x, y, GREY);
+        }
+    }
+
+    // Enter loop
+    for (;;) {}
 
 }
 
@@ -443,7 +478,7 @@ void init_pieces() {
     bitboards[W_KING] =   kings;
 
     // Black bitboards
-    bitboards[B_PAWN] =   pawns << 56;
+    bitboards[B_PAWN] =   pawns << 40;
     bitboards[B_ROOK] =   rooks << 56;
     bitboards[B_KNIGHT] = knights << 56;
     bitboards[B_BISHOP] = bishops << 56;
@@ -496,24 +531,7 @@ void init_pieces() {
 
 }
 
-void draw_piece(uint8_t x, uint8_t y) {
-    if (board[x][y]) {
-        display_curser_move(LEFT_OFFST + x * SQ_SIZE + 7, y * SQ_SIZE + 7); 
-        display_char(display_pieces[board[x][y]]); 
-    }
-}
-
-void draw_pieces() {
-
-    uint8_t i, j;
-    for (i = 0; i < BOARD_SIZE; i++) {
-        for (j = 0; j < BOARD_SIZE; j++) {
-            draw_piece(i, j);                   
-        }
-    }
-
-}
-
+/* Compute the bitboard of valid moves for a king */
 uint64_t compute_king(uint64_t king_loc, uint64_t own_side) {
 
     // Account for file overflow/underflow
@@ -537,6 +555,7 @@ uint64_t compute_king(uint64_t king_loc, uint64_t own_side) {
     return king_moves & ~own_side;
 }
 
+/* Compute the bitboard of valid moves for a knight */
 uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
 
     // Account for file overflow/underflow
@@ -562,37 +581,65 @@ uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
     uint64_t knight_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
     uint64_t knight_valid = knight_moves & ~own_side;
 
-    char str[8];
-    sprintf(str, "%d", knight_valid);
-    display_string_xy(str, 5, 5);
-
     return knight_valid;
-
-    // return 1 << 19;
-
 }
 
-void debug_bitboard(uint64_t bb) {
+/* Compute the bitboard of valid moves for a white pawn */
+uint64_t compute_white_pawn(uint64_t pawn_loc) {
 
-    cli();
+    // -- Calculate pawn moves --
 
-    for (int i = 0; i < 64; i++) {
+    // Single space in front of pawn
+    uint64_t one_step = (pawn_loc << 8) & ~bitboards[WB_ALL];
 
-        uint8_t x, y;
-        rf_to_dp(i, &x, &y);
+    // Check second step if one step is possible from rank 2
+    uint64_t two_step = ((one_step & mask_rank[RANK_3]) << 8) & ~bitboards[WB_ALL];
 
-        if (bb >> i & 1) {
+    uint64_t valid_moves = one_step | two_step;
 
-            draw_square(x, y, WHITE);
+    // -- Calculate pawn attacks --
 
-        } else {
+    // Left attacks (considering underflow on file A)
+    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) << 7;
 
-            draw_square(x, y, GREY);
-        }
+    // Right attacks (considering overflow on file H)
+    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) << 9;
 
-    }
+    uint64_t valid_att = (left_att | right_att) & bitboards[B_ALL];
 
-    // Enter loop
-    for (;;) {}
+    // -- Combine --
 
+    uint64_t valid = valid_moves | valid_att;
+
+    return valid;
+}
+
+/* Compute the bitboard of valid moves for a black pawn */
+uint64_t compute_black_pawn(uint64_t pawn_loc) {
+
+    // -- Calculate pawn moves --
+
+    // Single space in front of pawn
+    uint64_t one_step = (pawn_loc >> 8) & ~bitboards[WB_ALL];
+
+    // Check second step if one step is possible from rank 7
+    uint64_t two_step = ((one_step & mask_rank[RANK_6]) >> 8) & ~bitboards[WB_ALL];
+
+    uint64_t valid_moves = one_step | two_step;
+
+    // -- Calculate pawn attacks --
+
+    // Left attacks (considering underflow on file A)
+    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) >> 9;
+
+    // Right attacks (considering overflow on file H)
+    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) >> 7;
+
+    uint64_t valid_att = (left_att | right_att) & bitboards[B_ALL];
+
+    // -- Combine --
+
+    uint64_t valid = valid_moves | valid_att;
+
+    return valid;
 }
