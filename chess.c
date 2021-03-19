@@ -51,6 +51,9 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
 uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side);
 uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side);
 
+uint64_t compute_white_attacked_minus_black_king();
+uint64_t compute_black_attacked_minus_white_king();
+
 void poll_selector();
 void poll_redraw_selected();
 void poll_move_gen();
@@ -321,10 +324,12 @@ void poll_move_gen() {
                 return;
             
             case B_KING:
-                open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]);
+                open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]) &
+                             ~compute_white_attacked_minus_black_king();
                 break;
             case W_KING:
-                open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]);
+                open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]) &
+                             ~compute_black_attacked_minus_white_king();
                 break;
             case B_KNIGHT:
                 open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
@@ -682,9 +687,11 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     // => We can use masks!
 
     // Memory constraints => we can't use lookup tables here.
-    // Would require 8 * 256 * 8 * 2 = 33kB > 8kB for all combinations.
+    // Would require 8 * 256 * 8 * 2 = 33kB > 8kB RAM for all combinations.
 
     // We need to stop the ray as soon as it hits the first enemy piece
+
+    uint64_t all_pieces = own_side | enemy_side;
 
     uint64_t valid = 0;
 
@@ -696,7 +703,7 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             int8_t p = rf;
             while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
                 p += 8;
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -710,7 +717,7 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             p = rf;
             while (p - 8 >= 0) {
                 p -= 8;
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -727,7 +734,7 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             p = rf;
             while ((p + 1) <= right_edge) {
                 p++;
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -741,7 +748,7 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             p = rf;
             while ((p - 1) >= left_edge) {
                 p--;
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -759,6 +766,8 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
 }
 
 uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side) {
+
+    uint64_t all_pieces = own_side | enemy_side;
 
     uint64_t valid = 0;
 
@@ -778,7 +787,7 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp++;
                 y_tmp--;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -796,7 +805,7 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp--;
                 y_tmp--;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -814,7 +823,7 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp--;
                 y_tmp++;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -832,7 +841,7 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp++;
                 y_tmp++;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & bitboards[WB_ALL]) {
+                if (piece[p] & all_pieces) {
                     if (piece[p] & enemy_side) {
                         valid |= piece[p];
                     }
@@ -862,17 +871,36 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
     return bishop_moves | rook_moves;
 }
 
-// uint64_t compute_attacked_by_white() {
+uint64_t compute_white_attacked_minus_black_king() {
 
-//     uint64_t pawns = compute_white_pawn(bitboards[W_PAWN]);
-//     uint64_t king = compute_king_incomplete(bitboards[W_KING], bitboards[W_ALL]);
-//     uint64_t knights = compute_knight(bitboards[W_KNIGHT], bitboards[W_ALL]);
+    // Non-sliders can be computed as usual
+    uint64_t pawns = compute_white_pawn(bitboards[W_PAWN]);
+    uint64_t king = compute_king_incomplete(bitboards[W_KING], bitboards[W_ALL]);
+    uint64_t knights = compute_knight(bitboards[W_KNIGHT], bitboards[W_ALL]);
 
-//     // INVALID. Needs to be able to compute for all at once!
-//     uint64_t rooks = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL]);
-//     uint64_t bishops = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], bitboards[B_ALL]);
-//     uint64_t queens = compute_queen(bitboards[])
+    // Sliders must ignore the black king to invalidate moves away from slider attacks by black king
+    uint64_t black_minus_king = bitboards[B_ALL] & ~bitboards[B_KING];
+    uint64_t rooks = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], black_minus_king);
+    uint64_t bishops = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], black_minus_king);
+    uint64_t queens = compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], black_minus_king);
 
-//     // bitboards[W_PAWN]
+    return pawns | king | knights | rooks | bishops | queens;
 
-// }
+}
+
+uint64_t compute_black_attacked_minus_white_king() {
+
+    // Non-sliders can be computed as usual
+    uint64_t pawns = compute_white_pawn(bitboards[B_PAWN]);
+    uint64_t king = compute_king_incomplete(bitboards[B_KING], bitboards[B_ALL]);
+    uint64_t knights = compute_knight(bitboards[B_KNIGHT], bitboards[B_ALL]);
+
+    // Sliders must ignore the black king to invalidate moves away from slider attacks by black king
+    uint64_t white_minus_king = bitboards[W_ALL] & ~bitboards[W_KING];
+    uint64_t rooks = compute_rook(bitboards[B_ROOK], bitboards[B_ALL], white_minus_king);
+    uint64_t bishops = compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], white_minus_king);
+    uint64_t queens = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_minus_king);
+
+    return pawns | king | knights | rooks | bishops | queens;
+
+}
