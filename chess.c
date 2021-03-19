@@ -54,6 +54,9 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
 uint64_t compute_white_attacked_minus_black_king();
 uint64_t compute_black_attacked_minus_white_king();
 
+bool is_white_checked(uint64_t king_loc);
+bool is_black_checked(uint64_t king_loc);
+
 void poll_selector();
 void poll_redraw_selected();
 void poll_move_gen();
@@ -902,5 +905,75 @@ uint64_t compute_black_attacked_minus_white_king() {
     uint64_t queens = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_minus_king);
 
     return pawns | king | knights | rooks | bishops | queens;
+
+}
+
+bool is_white_checked(uint64_t king_loc) {
+
+
+    // Strategy: place enemy piece types on king position and see if they attack a real enemy piece
+
+    uint64_t white_minus_king = bitboards[W_ALL] & ~king_loc;
+    
+    // Pawns are a unique case as pawn attack direction is tightly coupled
+    // Check if king were a WHITE pawn, would it attack a BLACK pawn?
+    uint64_t pawn_move = compute_white_pawn(king_loc);
+    if (pawn_move & bitboards[B_PAWN]) return true;
+
+    // Knights
+    uint64_t knight_move = compute_knight(king_loc, bitboards[B_ALL]);
+    if (knight_move & bitboards[B_KNIGHT]) return true;
+
+    // Bishops
+    uint64_t bishop_move = compute_bishop(king_loc, bitboards[B_ALL], white_minus_king);
+    if (bishop_move & bitboards[B_BISHOP]) return true;
+
+    // Rooks
+    uint64_t rook_move = compute_rook(king_loc, bitboards[B_ALL], white_minus_king);
+    if (rook_move & bitboards[B_ROOK]) return true;
+
+    // Queens
+    uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], white_minus_king);
+    if (queen_move & bitboards[B_QUEEN]) return true;
+
+    // No need to check for kings as that's impossible.
+
+    return false;
+
+
+}
+
+bool is_black_checked(uint64_t king_loc) {
+
+
+    // Strategy: place enemy piece types on king position and see if they attack a real enemy piece
+
+    uint64_t black_minus_king = bitboards[B_ALL] & ~king_loc;
+    
+    // Pawns are a unique case as pawn attack direction is tightly coupled
+    // Check if king were a BLACK pawn, would it attack a WHITE pawn?
+    uint64_t pawn_move = compute_black_pawn(king_loc);
+    if (pawn_move & bitboards[W_PAWN]) return true;
+
+    // Knights
+    uint64_t knight_move = compute_knight(king_loc, bitboards[W_ALL]);
+    if (knight_move & bitboards[W_KNIGHT]) return true;
+
+    // Bishops
+    uint64_t bishop_move = compute_bishop(king_loc, bitboards[W_ALL], black_minus_king);
+    if (bishop_move & bitboards[W_BISHOP]) return true;
+
+    // Rooks
+    uint64_t rook_move = compute_rook(king_loc, bitboards[W_ALL], black_minus_king);
+    if (rook_move & bitboards[W_ROOK]) return true;
+
+    // Queens
+    uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], black_minus_king);
+    if (queen_move & bitboards[W_QUEEN]) return true;
+
+    // No need to check for kings as that's impossible.
+
+    return false;
+
 
 }
