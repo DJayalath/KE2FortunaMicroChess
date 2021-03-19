@@ -688,171 +688,163 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
 
     uint64_t valid = 0;
 
-    uint8_t file;
-    for (file = 0; file < BOARD_SIZE; file++) {
-        if (rook_loc & mask_file[file]) break;
-    }
+    for (uint8_t rf = 0; rf < BOARD_SIZE * BOARD_SIZE; rf++) {
 
-    uint8_t rank;
-    for (rank = 0; rank < BOARD_SIZE; rank++) {
-        if (rook_loc & mask_rank[rank]) break;
-    }
+        if (rook_loc & piece[rf]) {
 
-    int8_t rf = rank * BOARD_SIZE + file;
-
-    // Build upward ray
-    int8_t p = rf;
-    while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
-        p += 8;
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // Build upward ray
+            int8_t p = rf;
+            while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
+                p += 8;
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    // Build downward ray
-    p = rf;
-    while (p - 8 >= 0) {
-        p -= 8;
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // Build downward ray
+            p = rf;
+            while (p - 8 >= 0) {
+                p -= 8;
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
-    uint8_t right_edge = left_edge + BOARD_SIZE - 1;
+            uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
+            uint8_t right_edge = left_edge + BOARD_SIZE - 1;
 
-    // Build right ray
-    p = rf;
-    while ((p + 1) <= right_edge) {
-        p++;
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // Build right ray
+            p = rf;
+            while ((p + 1) <= right_edge) {
+                p++;
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    // Build left ray (BROKEN)
-    p = rf;
-    while ((p - 1) >= left_edge) {
-        p--;
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // Build left ray (BROKEN)
+            p = rf;
+            while ((p - 1) >= left_edge) {
+                p--;
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
+
         }
-    }
+
+    }    
 
     return valid;
 }
 
 uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side) {
 
-    uint8_t file;
-    for (file = 0; file < BOARD_SIZE; file++) {
-        if (bishop_loc & mask_file[file]) break;
-    }
-
-    uint8_t rank;
-    for (rank = 0; rank < BOARD_SIZE; rank++) {
-        if (bishop_loc & mask_rank[rank]) break;
-    }
-
-    uint8_t rf = rank * BOARD_SIZE + file;
-
-    uint8_t x, y;
-    rf_to_dp(rf, &x, &y);
-
-    uint8_t p;
-
-    uint8_t x_tmp = x;
-    uint8_t y_tmp = y;
-
     uint64_t valid = 0;
 
-    // TR
-    while(x_tmp + 1 < BOARD_SIZE && y_tmp - 1 >= 0) {
-        x_tmp++;
-        y_tmp--;
-        p = dp_to_rf(x_tmp, y_tmp);
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+    for (uint8_t rf = 0; rf < BOARD_SIZE * BOARD_SIZE; rf++) {
+
+        if (bishop_loc & piece[rf]) {
+
+            uint8_t x, y;
+            rf_to_dp(rf, &x, &y);
+
+            uint8_t x_tmp = x;
+            uint8_t y_tmp = y;
+            uint8_t p;
+
+            // TR
+            while(x_tmp + 1 < BOARD_SIZE && y_tmp - 1 >= 0) {
+                x_tmp++;
+                y_tmp--;
+                p = dp_to_rf(x_tmp, y_tmp);
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    x_tmp = x;
-    y_tmp = y;
+            x_tmp = x;
+            y_tmp = y;
 
-    // TL
-    while(x_tmp - 1 >= 0 && y_tmp - 1 >= 0) {
-        x_tmp--;
-        y_tmp--;
-        p = dp_to_rf(x_tmp, y_tmp);
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // TL
+            while(x_tmp - 1 >= 0 && y_tmp - 1 >= 0) {
+                x_tmp--;
+                y_tmp--;
+                p = dp_to_rf(x_tmp, y_tmp);
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    x_tmp = x;
-    y_tmp = y;
+            x_tmp = x;
+            y_tmp = y;
 
-    // BL
-    while(x_tmp - 1 >= 0 && y_tmp + 1 < BOARD_SIZE) {
-        x_tmp--;
-        y_tmp++;
-        p = dp_to_rf(x_tmp, y_tmp);
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // BL
+            while(x_tmp - 1 >= 0 && y_tmp + 1 < BOARD_SIZE) {
+                x_tmp--;
+                y_tmp++;
+                p = dp_to_rf(x_tmp, y_tmp);
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
-        }
-    }
 
-    x_tmp = x;
-    y_tmp = y;
+            x_tmp = x;
+            y_tmp = y;
 
-    // BR
-    while(x_tmp + 1 < BOARD_SIZE && y_tmp + 1 < BOARD_SIZE) {
-        x_tmp++;
-        y_tmp++;
-        p = dp_to_rf(x_tmp, y_tmp);
-        if (piece[p] & bitboards[WB_ALL]) {
-            if (piece[p] & enemy_side) {
-                valid |= piece[p];
+            // BR
+            while(x_tmp + 1 < BOARD_SIZE && y_tmp + 1 < BOARD_SIZE) {
+                x_tmp++;
+                y_tmp++;
+                p = dp_to_rf(x_tmp, y_tmp);
+                if (piece[p] & bitboards[WB_ALL]) {
+                    if (piece[p] & enemy_side) {
+                        valid |= piece[p];
+                    }
+                    break;
+                } else {
+                    valid |= piece[p];
+                }
             }
-            break;
-        } else {
-            valid |= piece[p];
+
+
         }
+
     }
 
     return valid;
@@ -869,3 +861,18 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
 
     return bishop_moves | rook_moves;
 }
+
+// uint64_t compute_attacked_by_white() {
+
+//     uint64_t pawns = compute_white_pawn(bitboards[W_PAWN]);
+//     uint64_t king = compute_king_incomplete(bitboards[W_KING], bitboards[W_ALL]);
+//     uint64_t knights = compute_knight(bitboards[W_KNIGHT], bitboards[W_ALL]);
+
+//     // INVALID. Needs to be able to compute for all at once!
+//     uint64_t rooks = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL]);
+//     uint64_t bishops = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], bitboards[B_ALL]);
+//     uint64_t queens = compute_queen(bitboards[])
+
+//     // bitboards[W_PAWN]
+
+// }
