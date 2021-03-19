@@ -775,35 +775,22 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
     }
 
     uint8_t rf = rank * BOARD_SIZE + file;
-    
-    uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
-    uint8_t right_edge = left_edge + BOARD_SIZE - 1;
 
-    uint8_t max_l = file - left_edge;
-    uint8_t max_r = right_edge - file;
+    uint8_t x, y;
+    rf_to_dp(rf, &x, &y);
 
-    uint8_t h = rank;
-    uint8_t max_d = h;
-    uint8_t max_u = BOARD_SIZE - h - 1;
+    uint8_t p;
 
-    uint8_t lim_max = MIN(max_l, max_u);
-    uint8_t tl = (file - lim_max) + (rank + lim_max) * BOARD_SIZE;
-
-    lim_max = MIN(max_r, max_u);
-    uint8_t tr = (file + lim_max) + (rank + lim_max) * BOARD_SIZE;
-
-    lim_max = MIN(max_l, max_d);
-    uint8_t bl = (file - lim_max) + (rank - lim_max) * BOARD_SIZE;
-
-    lim_max = MIN(max_r, max_d);
-    uint8_t br = (file + lim_max) + (rank - lim_max) * BOARD_SIZE;
+    uint8_t x_tmp = x;
+    uint8_t y_tmp = y;
 
     uint64_t valid = 0;
 
-    // TL
-    uint8_t p = rf;
-    while ((p + 7) <= tl) {
-        p += 7;
+    // TR
+    while(x_tmp + 1 < BOARD_SIZE && y_tmp - 1 >= 0) {
+        x_tmp++;
+        y_tmp--;
+        p = dp_to_rf(x_tmp, y_tmp);
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
                 valid |= piece[p];
@@ -814,10 +801,14 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
         }
     }
 
-    // TR
-    p = rf;
-    while ((p + 9) <= tr) {
-        p += 9;
+    x_tmp = x;
+    y_tmp = y;
+
+    // TL
+    while(x_tmp - 1 >= 0 && y_tmp - 1 >= 0) {
+        x_tmp--;
+        y_tmp--;
+        p = dp_to_rf(x_tmp, y_tmp);
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
                 valid |= piece[p];
@@ -827,11 +818,15 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
             valid |= piece[p];
         }
     }
+
+    x_tmp = x;
+    y_tmp = y;
 
     // BL
-    p = rf;
-    while ((p - 9) >= bl) {
-        p -= 9;
+    while(x_tmp - 1 >= 0 && y_tmp + 1 < BOARD_SIZE) {
+        x_tmp--;
+        y_tmp++;
+        p = dp_to_rf(x_tmp, y_tmp);
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
                 valid |= piece[p];
@@ -842,10 +837,14 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
         }
     }
 
+    x_tmp = x;
+    y_tmp = y;
+
     // BR
-    p = rf;
-    while ((p - 7) >= br) {
-        p -= 7;
+    while(x_tmp + 1 < BOARD_SIZE && y_tmp + 1 < BOARD_SIZE) {
+        x_tmp++;
+        y_tmp++;
+        p = dp_to_rf(x_tmp, y_tmp);
         if (piece[p] & bitboards[WB_ALL]) {
             if (piece[p] & enemy_side) {
                 valid |= piece[p];
