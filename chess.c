@@ -48,6 +48,7 @@ uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
 uint64_t compute_white_pawn(uint64_t pawn_loc);
 uint64_t compute_black_pawn(uint64_t pawn_loc);
 uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side);
+uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side);
 uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side);
 
 void poll_selector();
@@ -342,6 +343,12 @@ void poll_move_gen() {
                 break;
             case W_ROOK:
                 open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                break;
+            case B_BISHOP:
+                open_moves = compute_bishop(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                break;
+            case W_BISHOP:
+                open_moves = compute_bishop(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
                 break;
             case B_QUEEN:
                 open_moves = compute_queen(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
@@ -755,23 +762,16 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     return valid;
 }
 
-#define MIN(a,b) (((a)<(b))?(a):(b))
-
-uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side) {
-
-    // Trivially compute rook subset of moves
-    uint64_t rook_moves = compute_rook(queen_loc, own_side, enemy_side);
-
-    // Can be sped up (this is repeated computation)
+uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side) {
 
     uint8_t file;
     for (file = 0; file < BOARD_SIZE; file++) {
-        if (queen_loc & mask_file[file]) break;
+        if (bishop_loc & mask_file[file]) break;
     }
 
     uint8_t rank;
     for (rank = 0; rank < BOARD_SIZE; rank++) {
-        if (queen_loc & mask_rank[rank]) break;
+        if (bishop_loc & mask_rank[rank]) break;
     }
 
     uint8_t rf = rank * BOARD_SIZE + file;
@@ -855,5 +855,17 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
         }
     }
 
-    return valid | rook_moves;
+    return valid;
+
+}
+
+uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side) {
+
+    // Compute rook subset of moves
+    uint64_t rook_moves = compute_rook(queen_loc, own_side, enemy_side);
+
+    // Compute bishop subset of moves
+    uint64_t bishop_moves = compute_bishop(queen_loc, own_side, enemy_side);
+
+    return bishop_moves | rook_moves;
 }
