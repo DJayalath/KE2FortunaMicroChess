@@ -1099,17 +1099,17 @@ void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     uint64_t bishop_move = compute_bishop(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
     *capture_mask |= bishop_move & bitboards[B_BISHOP];
     // FIXME: Verify if this is correct?
-    *push_mask |= bishop_move & compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], bitboards[W_ALL] & ~bitboards[W_KING]);
+    *push_mask |= bishop_move & compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
 
     // Rooks
     uint64_t rook_move = compute_rook(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
     *capture_mask |= rook_move & bitboards[B_ROOK];
-    *push_mask |= rook_move & compute_rook(bitboards[B_ROOK], bitboards[B_ALL], bitboards[W_ALL] & ~bitboards[W_KING]);
+    *push_mask |= rook_move & compute_rook(bitboards[B_ROOK], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
 
     // Queens
     uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
     *capture_mask |= queen_move & bitboards[B_QUEEN];
-    *push_mask |= queen_move & compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[W_ALL] & ~bitboards[W_KING]);
+    *push_mask |= queen_move & compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
 
     // No need to check for kings as that's impossible.
 }
@@ -1135,18 +1135,18 @@ void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     // Bishops
     uint64_t bishop_move = compute_bishop(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
     *capture_mask |= bishop_move & bitboards[W_BISHOP];
-    *push_mask |= bishop_move & compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], bitboards[B_ALL] & ~bitboards[B_KING]);
+    *push_mask |= bishop_move & compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
 
     // Rooks
     uint64_t rook_move = compute_rook(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
     *capture_mask |= rook_move & bitboards[W_ROOK];
     // Set bits BETWEEN the rook and king. Take conjunction of rook moves from both positions!
-    *push_mask |= rook_move & compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL] & ~bitboards[B_KING]);
+    *push_mask |= rook_move & compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
 
     // Queens
     uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
     *capture_mask |= queen_move & bitboards[W_QUEEN];
-    *push_mask |= queen_move & compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], bitboards[B_ALL] & ~bitboards[B_KING]);
+    *push_mask |= queen_move & compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
 
 }
 
