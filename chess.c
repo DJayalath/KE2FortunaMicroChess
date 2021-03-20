@@ -57,7 +57,10 @@ uint64_t compute_black_attacked_minus_white_king();
 
 void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
 void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
-// void is_black_checked(uint64_t king_loc);
+
+void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t t, uint8_t own_side, uint8_t enemy_side);
+uint8_t get_piece_type(uint64_t p);
+
 
 void poll_selector();
 void poll_redraw_selected();
@@ -343,6 +346,20 @@ void poll_selector() {
             if (piece[rf] & open_moves) {
 
                 // Move piece
+                uint8_t rf_old = dp_to_rf(selector.lock_x, selector.lock_y);
+                uint8_t ty = get_piece_type(piece[rf_old]); 
+                uint8_t own_side = (ty < B_PAWN) ? W_ALL : B_ALL;
+                uint8_t enemy_side = (own_side == W_ALL) ? B_ALL : W_ALL;
+                move_piece(piece[rf_old], piece[rf], selector.lock_x, selector.lock_y, selector.sel_x, selector.sel_y, ty, own_side, enemy_side);
+
+                // Redraw old position
+                uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
+                draw_square(selector.lock_x, selector.lock_y, col);
+                draw_piece(selector.lock_x, selector.lock_y);
+
+                // Redraw new position
+                draw_square(selector.sel_x, selector.sel_y, TURQUOISE);
+                draw_piece(selector.sel_x, selector.sel_y);
 
             } else {
 
@@ -350,13 +367,12 @@ void poll_selector() {
                 uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
                 draw_square(selector.lock_x, selector.lock_y, col);
                 draw_piece(selector.lock_x, selector.lock_y);
-
-                // Open moves, no longer valid
-                open_valid = 0;
-                reset_open_moves();
                 
             }
 
+            // Open moves, no longer valid
+            open_valid = 0;
+            reset_open_moves();
             selector.state = SELECTOR_FREE;
 
         }
@@ -1152,5 +1168,15 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
     // Update lookup table
     board[px][py] = EMPTY;
     board[qx][qy] = t;
+
+}
+
+uint8_t get_piece_type(uint64_t p) {
+
+    for (uint8_t i = 1; i < 13; i++) {
+        if (p & bitboards[i]) return i;
+    }
+
+    return 0;
 
 }
