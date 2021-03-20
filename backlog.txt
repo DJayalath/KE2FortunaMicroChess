@@ -1,1 +1,3 @@
 - For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
+- En passant blocks and captures
+- En passant discovered check

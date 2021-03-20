@@ -1,48 +1,64 @@
+// AUTHOR: Dulhan Jayalath
+
 #include <stdlib.h>
 #include <avr/io.h>
 #include <string.h>
 #include "unifiedLcd.h"
 #include "rotary.h"
 
-#define LT_SQ_COL SANDY_BROWN
-#define DK_SQ_COL SADDLE_BROWN
-#define OPN_COL LIGHT_PINK
-#define LOCK_COL GREEN
+/* Board size constraints */
 
 #define BOARD_SIZE 8
 #define SQ_SIZE 30
 #define LEFT_OFFST 40
 
-// Numbered constants for piece types
-#define EMPTY 0
+/* Board square colour constants */
 
+#define LT_SQ_COL SANDY_BROWN
+#define DK_SQ_COL SADDLE_BROWN
+#define OPN_COL LIGHT_PINK
+#define LOCK_COL GREEN
+#define HL_COL TURQUOISE
+
+/* Piece type constants */
+
+#define EMPTY 0
 #define W_PAWN 1
 #define W_KNIGHT 2
 #define W_BISHOP 3
 #define W_ROOK 4
 #define W_QUEEN 5
 #define W_KING 6
-
 #define B_PAWN 7
 #define B_KNIGHT 8
 #define B_BISHOP 9
 #define B_ROOK 10
 #define B_QUEEN 11
 #define B_KING 12
-
 #define W_ALL 13
 #define B_ALL 14
 #define WB_ALL 15
 
+/* Initialisation functions */
+
+void init_pieces();
+
+/* Draw functions */
+
 void draw_board();
 void draw_credits();
-void init_pieces();
 void draw_pieces();
 void draw_square(uint8_t x, uint8_t y, uint16_t colour);
 void draw_piece(uint8_t x, uint8_t y);
+void draw_open_moves();
+void reset_open_moves();
+
+/* Helper functions */
 
 uint8_t dp_to_rf(uint8_t x, uint8_t y);
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
+
+/* Move square computations */
 
 uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side);
 uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
@@ -52,29 +68,55 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
 uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side);
 uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side);
 
+/* "King danger" square computations */
+
 uint64_t compute_white_attacked_minus_black_king();
 uint64_t compute_black_attacked_minus_white_king();
+
+/* In-check capture and push mask computation */
 
 void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
 void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
 
+/* Piece pinned to king mask computation */
+
+uint64_t compute_pin_mask_white(uint64_t piece);
+uint64_t compute_pin_mask_black(uint64_t piece);
+
+/* Representational piece movement */
+
 void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t t, uint8_t own_side, uint8_t enemy_side);
 uint8_t get_piece_type(uint64_t p);
 
+/* Polling for basic game functions */
 
 void poll_selector();
 void poll_redraw_selected();
 void poll_move_gen();
-void draw_open_moves();
-void reset_open_moves();
+
+/* Debug functions (TODO: Can be removed if memory constrained) */
 
 void debug_bitboard(uint64_t bb);
 
+// Selector state enumeration
 enum {
     SELECTOR_FREE,
     SELECTOR_LOCKED,
 };
 
+// Rank lookup table indexes
+enum {
+    RANK_1, RANK_2, RANK_3, RANK_4,
+    RANK_5, RANK_6, RANK_7, RANK_8
+};
+
+// File lookup table indexes
+enum {
+    FILE_A, FILE_B, FILE_C, FILE_D,
+    FILE_E, FILE_F, FILE_G, FILE_H
+};
+
+// Encapsulate state of selection modes
 struct {
     uint8_t state;
     uint8_t sel_x, sel_y;
@@ -82,13 +124,33 @@ struct {
     uint8_t lock_x, lock_y;
 } selector;
 
-// State of the board as 2D array for easy drawing
+// Piece type lookup table and visual representation
+// Note: indexed as [X][Y] NOT [ROW][COL] where (0,0) is top left
+// Right is +x, Down is +y
 uint8_t board[BOARD_SIZE][BOARD_SIZE];
 
-// State of board as bitboards for efficient computation
+// Bitboards for efficient computation
+// FIXME: Not actually using all allocated bitboard memory here. Can limit array size further if needed.
 uint64_t bitboards[BOARD_SIZE * BOARD_SIZE];
 
-// Lookup tables
+// Bitboards with only rank-file index bit set
+uint64_t piece[BOARD_SIZE * BOARD_SIZE];
+
+// Moves open to player on board
+uint64_t open_moves;
+
+// Is the open move buffer valid? Or does it need re-computing?
+uint8_t open_valid = 0;
+
+// Is a redraw needed?
+volatile uint8_t redraw_select = 0;
+
+// Visual display characters for the piece types and colours
+// TODO: Future extension - Replace visual characters with sprites?
+const char* display_pieces = " PNBRQKpnbrqk";
+
+/* Lookup tables */
+
 const uint64_t clear_rank[BOARD_SIZE] = {
     0xFFFFFFFFFFFFFF00,
     0xFFFFFFFFFFFF00FF,
@@ -117,104 +179,60 @@ const uint64_t clear_file[BOARD_SIZE] = {
     0xFDFDFDFDFDFDFDFD,
     0xFBFBFBFBFBFBFBFB,
     0xF7F7F7F7F7F7F7F7,
-
     0xEFEFEFEFEFEFEFEF,
     0xDFDFDFDFDFDFDFDF,
     0xBFBFBFBFBFBFBFBF,
     0x7F7F7F7F7F7F7F7F
 };
 
-
 const uint64_t mask_file[BOARD_SIZE] = {
-
     0x0101010101010101,
     0x0202020202020202,
     0x0404040404040404,
     0x0808080808080808,
-
     0x1010101010101010,
     0x2020202020202020,
     0x4040404040404040,
     0x8080808080808080
-
 };
-
-
-uint64_t piece[BOARD_SIZE * BOARD_SIZE];
-
-// Moves open to player on board
-uint64_t open_moves;
-uint8_t open_valid = 0; // Whether the current open_moves buffer is invalidated or not
-
-enum {
-    RANK_1,
-    RANK_2,
-    RANK_3,
-    RANK_4,
-    RANK_5,
-    RANK_6,
-    RANK_7,
-    RANK_8
-};
-
-enum {
-    FILE_A,
-    FILE_B,
-    FILE_C,
-    FILE_D,
-    FILE_E,
-    FILE_F,
-    FILE_G,
-    FILE_H
-};
-
-// Selected square
-// volatile uint8_t sel_x = 0;
-// volatile uint8_t sel_y = 0;
-// volatile uint8_t sel_x_last = 0;
-// volatile uint8_t sel_y_last = 0;
-
-volatile uint8_t redraw_select = 0;
-// volatile uint8_t select_enable = 1;
-
-const char* display_pieces = " PNBRQKpnbrqk";
 
 /* Handle rotary encoder changes on timer interrupts */
 ISR(TIMER1_COMPA_vect) {
 
-    if (rotary > 0) {
+    if (rotary) {
 
+        // Store the previously selected square (needs to be redrawn)
         selector.sel_x_last = selector.sel_x;
         selector.sel_y_last = selector.sel_y;
 
-        if (selector.sel_x > 0) {
-            selector.sel_x--;
-        } else {
-            if (selector.sel_y > 0) {
-                selector.sel_y--;
-                selector.sel_x = 7;
+        // Update with location of new selected square
+        if (rotary > 0) {
+            if (selector.sel_x > 0) {
+                selector.sel_x--;
+            } else {
+                if (selector.sel_y > 0) {
+                    selector.sel_y--;
+                    selector.sel_x = 7;
+                }
+            }
+        } else if (rotary < 0) {
+            if (selector.sel_x < 7) {
+                selector.sel_x++;
+            } else {
+                if (selector.sel_y < 7) {
+                    selector.sel_y++;
+                    selector.sel_x = 0;
+                }
             }
         }
+
+        // Need to redraw squares
         redraw_select = 1;
+
+        // Reset rotary status buffer
+        rotary = 0;
+
     }
-    if (rotary < 0) {
-
-        selector.sel_x_last = selector.sel_x;
-        selector.sel_y_last = selector.sel_y;
-
-        if (selector.sel_x < 7) {
-            selector.sel_x++;
-        } else {
-            if (selector.sel_y < 7) {
-                selector.sel_y++;
-                selector.sel_x = 0;
-            }
-        }
-        redraw_select = 1;
-    }
-
-
-    rotary = 0;
 
 }
 
@@ -252,20 +270,33 @@ int main() {
     //     "PPPPPPPP"
     //     "RNBQKBNR";
     
+    // const char* board_rep = 
+    //     "....k..."
+    //     "........"
+    //     "......n."
+    //     "....R..."
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "....K...";
+
     const char* board_rep = 
-        "....k..."
+        ".k......"
         "........"
-        "......n."
+        "........"
+        "....q..."
+        "........"
         "....R..."
-        "........"
-        "........"
         "........"
         "....K...";
 
+    // Draw basic components
     draw_board();
-    init_pieces(board_rep);
     draw_pieces();
     draw_credits();
+
+    // Initialise the board
+    init_pieces(board_rep);
 
     sei();
     for (;;) {
@@ -285,30 +316,28 @@ void poll_redraw_selected() {
         // Disable interrupts (display routine must NOT be disturbed)
         cli();
 
-        // Redraw last square
+        // Compute colour of the previously highlighted square
         uint16_t col = ((selector.sel_x_last + selector.sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
-        
         // If it was a open move square, ensure to use that colour
         uint8_t rf = dp_to_rf(selector.sel_x_last, selector.sel_y_last);
         if ((piece[rf] & open_moves) && open_valid) {
             col = OPN_COL;
         }
-
         if (selector.state == SELECTOR_LOCKED && selector.sel_x_last == selector.lock_x && selector.sel_y_last == selector.lock_y) {
             col = LOCK_COL;
         }
 
+        // Restore the previously highlighted square
         draw_square(selector.sel_x_last, selector.sel_y_last, col);
         draw_piece(selector.sel_x_last, selector.sel_y_last);
 
-        // Overwrite new square
-        draw_square(selector.sel_x, selector.sel_y, TURQUOISE);
+        // Highlight the newly selected square
+        draw_square(selector.sel_x, selector.sel_y, HL_COL);
         draw_piece(selector.sel_x, selector.sel_y);
 
         // Set flag to complete!
         redraw_select = 0;
 
-        // Renable interrupts
         sei();
     }
 }
@@ -324,19 +353,27 @@ void poll_selector() {
     while (~PINE & _BV(SWC)) {
 
         cli();
+
+        // Cache selector state to debounce switch presses
         uint8_t selector_cached = loop ? last : selector.state;
+
         if (selector_cached == SELECTOR_FREE) {
+
+            // The selector was free and has now been pressed, we need to lock in the selected square
         
-            // Overwrite square
+            // Redraw square to show it is locked
             draw_square(selector.sel_x, selector.sel_y, LOCK_COL);
             draw_piece(selector.sel_x, selector.sel_y);
 
+            // Update selector state with locked square
             selector.lock_x = selector.sel_x;
             selector.lock_y = selector.sel_y;
             selector.state = SELECTOR_LOCKED;
 
             // Invalidate open move buffer
             open_valid = 0;
+
+            // Redraw open move squares
             reset_open_moves();
 
         } else {
@@ -344,6 +381,8 @@ void poll_selector() {
             uint8_t rf = dp_to_rf(selector.sel_x, selector.sel_y);
 
             if (piece[rf] & open_moves) {
+
+                // An open move square has been selected, move the locked piece here
 
                 // Move piece
                 uint8_t rf_old = dp_to_rf(selector.lock_x, selector.lock_y);
@@ -358,10 +397,12 @@ void poll_selector() {
                 draw_piece(selector.lock_x, selector.lock_y);
 
                 // Redraw new position
-                draw_square(selector.sel_x, selector.sel_y, TURQUOISE);
+                draw_square(selector.sel_x, selector.sel_y, HL_COL);
                 draw_piece(selector.sel_x, selector.sel_y);
 
             } else {
+
+                // A non-open square has been selected, free the locked square
 
                 // Overwrite locked square with usual colour
                 uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
@@ -370,9 +411,13 @@ void poll_selector() {
                 
             }
 
-            // Open moves, no longer valid
+            // Invalidate the open move buffer
             open_valid = 0;
+
+            // Redraw squares as usual
             reset_open_moves();
+
+            // Update selector state
             selector.state = SELECTOR_FREE;
 
         }
@@ -385,10 +430,18 @@ void poll_selector() {
 
 /* Computes move generation for the selected piece */
 void poll_move_gen() {
+
+    // Only compute possible moves when a piece is locked and the move buffer is invalidated
     if (selector.state == SELECTOR_LOCKED && open_valid == 0) {
+
         uint8_t rf = dp_to_rf(selector.lock_x, selector.lock_y);
+
         uint64_t push_mask = 0;
         uint64_t capture_mask = 0;
+        uint64_t pin_mask = 0;
+
+        // TODO: Invalidate capture mask and push mask if multiple checkers
+
         switch(board[selector.lock_x][selector.lock_y]) {
 
             // OK, Idiot.
@@ -425,7 +478,9 @@ void poll_move_gen() {
                 open_moves = compute_rook(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
                 break;
             case W_ROOK:
+                pin_mask = compute_pin_mask_white(piece[rf]);
                 open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                open_moves &= pin_mask;
                 break;
             case B_BISHOP:
                 open_moves = compute_bishop(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
@@ -444,6 +499,7 @@ void poll_move_gen() {
 
         }
 
+        // Moves have been computed, so draw them
         draw_open_moves();
 
         // Validate open move buffer
@@ -563,7 +619,7 @@ void debug_bitboard(uint64_t bb) {
 
 }
 
-// [X][Y] NOT [ROW][COL]
+/* Initialises the game */
 void init_pieces(const char* board_rep) {
 
     // Initialise selector
@@ -738,8 +794,6 @@ void init_pieces(const char* board_rep) {
 }
 
 /* Compute the bitboard of valid moves for a king */
-// Incomplete because we are not checking for moves putting us in check, etc.
-// https://peterellisjones.com/posts/generating-legal-chess-moves-efficiently/
 uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side) {
 
     // Account for file overflow/underflow
@@ -1178,5 +1232,100 @@ uint8_t get_piece_type(uint64_t p) {
     }
 
     return 0;
+
+}
+
+// Comptue pin mask assuming enemy is black
+uint64_t compute_pin_mask_white(uint64_t piece) {
+
+    // Compute all sliding enemy moves + pawns and determine if rays
+    // ever intersect with same move from king position.
+    // Then, if the overlap contains the piece in quesiton, it is pinned.
+    // The overlapping ray is then the pin mask.
+
+    uint64_t pin_mask = 0;
+
+    uint64_t white_excluded = bitboards[W_ALL] & ~piece;
+
+    // P
+    // TODO: Check if this needs to use excluded white like the others.
+    uint64_t p = compute_black_pawn(bitboards[B_PAWN]);
+    uint64_t p_from_k = compute_white_pawn(bitboards[W_KING]);
+    if (piece & p & p_from_k) {
+        pin_mask |= piece & p & p_from_k;
+    }
+
+    // B
+    uint64_t b = compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], white_excluded);
+    uint64_t b_from_k = compute_bishop(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    if (piece & b & b_from_k) {
+        pin_mask |= piece & b & b_from_k;
+    }
+
+    // R
+    uint64_t r = compute_rook(bitboards[B_ROOK], bitboards[B_ALL], white_excluded);
+    uint64_t r_from_k = compute_rook(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    if (piece & r & r_from_k) {
+        pin_mask |= piece & r & r_from_k;
+    }
+
+    // Q
+    uint64_t q = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
+    uint64_t q_from_k = compute_queen(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    if (piece & q & q_from_k) {
+        pin_mask |= q & q_from_k;
+    }
+    
+
+    return pin_mask;
+
+}
+
+// Comptue pin mask assuming enemy is white
+uint64_t compute_pin_mask_black(uint64_t piece) {
+
+    // Compute all sliding enemy moves + pawns and determine if rays
+    // ever intersect with same move from king position.
+    // Then, if the overlap contains the piece in quesiton, it is pinned.
+    // The overlapping ray is then the pin mask.
+
+    uint64_t pin_mask = 0;
+
+    uint64_t black_excluded = bitboards[B_ALL] & ~piece;
+
+    // P
+    // TODO: Check if this needs to use excluded white like the others.
+    uint64_t p = compute_white_pawn(bitboards[W_PAWN]);
+    uint64_t p_from_k = compute_black_pawn(bitboards[B_KING]);
+    if (piece & p & p_from_k) {
+        pin_mask |= piece & p & p_from_k;
+    }
+
+
+    // B
+    uint64_t b = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], black_excluded);
+    uint64_t b_from_k = compute_bishop(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    if (piece & b & b_from_k) {
+        pin_mask |= piece & b & b_from_k;
+    }
+    
+
+    // R
+    uint64_t r = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], black_excluded);
+    uint64_t r_from_k = compute_rook(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    if (piece & r & r_from_k) {
+        pin_mask |= piece & r & r_from_k;
+    }
+    
+
+    // Q
+    uint64_t q = compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
+    uint64_t q_from_k = compute_queen(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    if (piece & q & q_from_k) {
+        pin_mask |= q & q_from_k;
+    }
+    
+
+    return pin_mask;
 
 }
