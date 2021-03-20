@@ -7,6 +7,7 @@
 #define LT_SQ_COL SANDY_BROWN
 #define DK_SQ_COL SADDLE_BROWN
 #define OPN_COL LIGHT_PINK
+#define LOCK_COL GREEN
 
 #define BOARD_SIZE 8
 #define SQ_SIZE 30
@@ -65,6 +66,18 @@ void draw_open_moves();
 void reset_open_moves();
 
 void debug_bitboard(uint64_t bb);
+
+enum {
+    SELECTOR_FREE,
+    SELECTOR_LOCKED,
+};
+
+struct {
+    uint8_t state;
+    uint8_t sel_x, sel_y;
+    uint8_t sel_x_last, sel_y_last;
+    uint8_t lock_x, lock_y;
+} selector;
 
 // State of the board as 2D array for easy drawing
 uint8_t board[BOARD_SIZE][BOARD_SIZE];
@@ -153,53 +166,50 @@ enum {
 };
 
 // Selected square
-volatile uint8_t sel_x = 0;
-volatile uint8_t sel_y = 0;
-volatile uint8_t sel_x_last = 0;
-volatile uint8_t sel_y_last = 0;
+// volatile uint8_t sel_x = 0;
+// volatile uint8_t sel_y = 0;
+// volatile uint8_t sel_x_last = 0;
+// volatile uint8_t sel_y_last = 0;
 
 volatile uint8_t redraw_select = 0;
-volatile uint8_t select_enable = 1;
+// volatile uint8_t select_enable = 1;
 
 const char* display_pieces = " PNBRQKpnbrqk";
 
 /* Handle rotary encoder changes on timer interrupts */
 ISR(TIMER1_COMPA_vect) {
 
-    if (select_enable) {
+    if (rotary > 0) {
 
-        if (rotary > 0) {
+        selector.sel_x_last = selector.sel_x;
+        selector.sel_y_last = selector.sel_y;
 
-            sel_x_last = sel_x;
-            sel_y_last = sel_y;
-
-            if (sel_x > 0) {
-                sel_x--;
-            } else {
-                if (sel_y > 0) {
-                    sel_y--;
-                    sel_x = 7;
-                }
+        if (selector.sel_x > 0) {
+            selector.sel_x--;
+        } else {
+            if (selector.sel_y > 0) {
+                selector.sel_y--;
+                selector.sel_x = 7;
             }
-            redraw_select = 1;
         }
-        if (rotary < 0) {
-
-            sel_x_last = sel_x;
-            sel_y_last = sel_y;
-
-            if (sel_x < 7) {
-                sel_x++;
-            } else {
-                if (sel_y < 7) {
-                    sel_y++;
-                    sel_x = 0;
-                }
-            }
-            redraw_select = 1;
-        }
-
+        redraw_select = 1;
     }
+    if (rotary < 0) {
+
+        selector.sel_x_last = selector.sel_x;
+        selector.sel_y_last = selector.sel_y;
+
+        if (selector.sel_x < 7) {
+            selector.sel_x++;
+        } else {
+            if (selector.sel_y < 7) {
+                selector.sel_y++;
+                selector.sel_x = 0;
+            }
+        }
+        redraw_select = 1;
+    }
+
 
     rotary = 0;
 
@@ -273,20 +283,24 @@ void poll_redraw_selected() {
         cli();
 
         // Redraw last square
-        uint16_t col = ((sel_x_last + sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
+        uint16_t col = ((selector.sel_x_last + selector.sel_y_last) & 1) ? DK_SQ_COL : LT_SQ_COL;
         
         // If it was a open move square, ensure to use that colour
-        uint8_t rf = dp_to_rf(sel_x_last, sel_y_last);
+        uint8_t rf = dp_to_rf(selector.sel_x_last, selector.sel_y_last);
         if ((piece[rf] & open_moves) && open_valid) {
             col = OPN_COL;
         }
 
-        draw_square(sel_x_last, sel_y_last, col);
-        draw_piece(sel_x_last, sel_y_last);
+        if (selector.state == SELECTOR_LOCKED && selector.sel_x_last == selector.lock_x && selector.sel_y_last == selector.lock_y) {
+            col = LOCK_COL;
+        }
+
+        draw_square(selector.sel_x_last, selector.sel_y_last, col);
+        draw_piece(selector.sel_x_last, selector.sel_y_last);
 
         // Overwrite new square
-        draw_square(sel_x, sel_y, TURQUOISE);
-        draw_piece(sel_x, sel_y);
+        draw_square(selector.sel_x, selector.sel_y, TURQUOISE);
+        draw_piece(selector.sel_x, selector.sel_y);
 
         // Set flag to complete!
         redraw_select = 0;
@@ -301,20 +315,22 @@ void poll_redraw_selected() {
 void poll_selector() {
 
     uint8_t loop = 0;
-    uint8_t last = select_enable;
+    uint8_t last = selector.state;
 
     // Detect select confirm
     while (~PINE & _BV(SWC)) {
 
         cli();
-        uint8_t selector = loop ? last : select_enable;
-        if (selector) {
+        uint8_t selector_cached = loop ? last : selector.state;
+        if (selector_cached == SELECTOR_FREE) {
         
             // Overwrite square
-            draw_square(sel_x, sel_y, GREEN);
-            draw_piece(sel_x, sel_y);
+            draw_square(selector.sel_x, selector.sel_y, LOCK_COL);
+            draw_piece(selector.sel_x, selector.sel_y);
 
-            select_enable = 0;
+            selector.lock_x = selector.sel_x;
+            selector.lock_y = selector.sel_y;
+            selector.state = SELECTOR_LOCKED;
 
             // Invalidate open move buffer
             open_valid = 0;
@@ -322,11 +338,26 @@ void poll_selector() {
 
         } else {
 
-            // Overwrite square
-            draw_square(sel_x, sel_y, TURQUOISE);
-            draw_piece(sel_x, sel_y);
+            uint8_t rf = dp_to_rf(selector.sel_x, selector.sel_y);
 
-            select_enable = 1;
+            if (piece[rf] & open_moves) {
+
+                // Move piece
+
+            } else {
+
+                // Overwrite locked square with usual colour
+                uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
+                draw_square(selector.lock_x, selector.lock_y, col);
+                draw_piece(selector.lock_x, selector.lock_y);
+
+                // Open moves, no longer valid
+                open_valid = 0;
+                reset_open_moves();
+                
+            }
+
+            selector.state = SELECTOR_FREE;
 
         }
 
@@ -338,11 +369,11 @@ void poll_selector() {
 
 /* Computes move generation for the selected piece */
 void poll_move_gen() {
-    if (select_enable == 0 && open_valid == 0) {
-        uint8_t rf = dp_to_rf(sel_x, sel_y);
+    if (selector.state == SELECTOR_LOCKED && open_valid == 0) {
+        uint8_t rf = dp_to_rf(selector.lock_x, selector.lock_y);
         uint64_t push_mask = 0;
         uint64_t capture_mask = 0;
-        switch(board[sel_x][sel_y]) {
+        switch(board[selector.lock_x][selector.lock_y]) {
 
             // OK, Idiot.
             case EMPTY:
@@ -518,6 +549,13 @@ void debug_bitboard(uint64_t bb) {
 
 // [X][Y] NOT [ROW][COL]
 void init_pieces(const char* board_rep) {
+
+    // Initialise selector
+    selector.state = SELECTOR_FREE;
+    selector.sel_x = 0;
+    selector.sel_y = 0;
+    selector.sel_x_last = 0;
+    selector.sel_y_last = 0;
 
     uint64_t ONE_64 = 1;
 
@@ -1055,7 +1093,7 @@ void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     // Queens
     uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
     *capture_mask |= queen_move & bitboards[B_QUEEN];
-    *push_mask |= queen_move & compute_queen(bitboard[B_QUEEN], bitboards[B_ALL], bitboards[W_ALL] & ~bitboards[W_KING]);
+    *push_mask |= queen_move & compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[W_ALL] & ~bitboards[W_KING]);
 
     // No need to check for kings as that's impossible.
 }
@@ -1093,5 +1131,26 @@ void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
     *capture_mask |= queen_move & bitboards[W_QUEEN];
     *push_mask |= queen_move & compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], bitboards[B_ALL] & ~bitboards[B_KING]);
+
+}
+
+void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t t, uint8_t own_side, uint8_t enemy_side) {
+
+    // Unset current position
+    bitboards[t] &= ~p;
+
+    // Set new position
+    bitboards[t] |= q;
+
+    // Update own side bitboard
+    bitboards[own_side] ^= p;
+    bitboards[own_side] |= q;
+
+    // Update all piece bitboard
+    bitboards[WB_ALL] = bitboards[own_side] | bitboards[enemy_side];
+
+    // Update lookup table
+    board[px][py] = EMPTY;
+    board[qx][qy] = t;
 
 }
