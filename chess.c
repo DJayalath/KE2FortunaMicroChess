@@ -54,8 +54,9 @@ uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_sid
 uint64_t compute_white_attacked_minus_black_king();
 uint64_t compute_black_attacked_minus_white_king();
 
-bool is_white_checked(uint64_t king_loc);
-bool is_black_checked(uint64_t king_loc);
+void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
+void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
+// void is_black_checked(uint64_t king_loc);
 
 void poll_selector();
 void poll_redraw_selected();
@@ -228,8 +229,28 @@ int main() {
 
     cli();
 
+    // const char* board_rep =
+    //     "rnbqkbnr"
+    //     "pppppppp"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "PPPPPPPP"
+    //     "RNBQKBNR";
+    
+    const char* board_rep = 
+        "....k..."
+        "........"
+        "......n."
+        "....R..."
+        "........"
+        "........"
+        "........"
+        "....K...";
+
     draw_board();
-    init_pieces();
+    init_pieces(board_rep);
     draw_pieces();
     draw_credits();
 
@@ -319,6 +340,8 @@ void poll_selector() {
 void poll_move_gen() {
     if (select_enable == 0 && open_valid == 0) {
         uint8_t rf = dp_to_rf(sel_x, sel_y);
+        uint64_t push_mask = 0;
+        uint64_t capture_mask = 0;
         switch(board[sel_x][sel_y]) {
 
             // OK, Idiot.
@@ -335,7 +358,12 @@ void poll_move_gen() {
                              ~compute_black_attacked_minus_white_king();
                 break;
             case B_KNIGHT:
+                is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
                 open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
+                // debug_bitboard(capture_mask);
+                if (capture_mask) {
+                    open_moves &= capture_mask | push_mask;
+                }
                 break;
             case W_KNIGHT:
                 open_moves = compute_knight(piece[rf], bitboards[W_ALL]);
@@ -489,38 +517,83 @@ void debug_bitboard(uint64_t bb) {
 }
 
 // [X][Y] NOT [ROW][COL]
-void init_pieces() {
+void init_pieces(const char* board_rep) {
 
-    /* Setup bitboards */
+    uint64_t ONE_64 = 1;
 
-    // RIGHT shift is towards LSB and is equivalent to moving a piece LEFT.
-    // White pieces are nearest LSB.
-    // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
+    uint8_t i = 0;
+    uint8_t x = 0;
+    uint8_t y = 0;
+    while (board_rep[i]) {
 
-    const uint64_t pawns = 0x0000;
-    // const uint64_t pawns = 0xFF00;
-    const uint64_t rooks = 0x81;
-    const uint64_t knights = 0x00;
-    // const uint64_t knights = 0x42;
-    const uint64_t bishops = 0x24;
-    const uint64_t queens = 0x8;
-    const uint64_t kings = 0x10;
+        uint8_t j = dp_to_rf(x, y);
 
-    // White bitboards
-    bitboards[W_PAWN] =   pawns;
-    bitboards[W_ROOK] =   rooks;
-    bitboards[W_KNIGHT] = knights;
-    bitboards[W_BISHOP] = bishops;
-    bitboards[W_QUEEN] =  queens;
-    bitboards[W_KING] =   kings;
+        switch (board_rep[i]) {
 
-    // Black bitboards
-    bitboards[B_PAWN] =   pawns << 40;
-    bitboards[B_ROOK] =   rooks << 56;
-    bitboards[B_KNIGHT] = knights << 56;
-    bitboards[B_BISHOP] = bishops << 56;
-    bitboards[B_QUEEN] =  queens << 56;
-    bitboards[B_KING] =   kings << 56;
+            case 'P':
+                bitboards[W_PAWN] |= ONE_64 << j;
+                board[x][y] = W_PAWN;
+                break;
+            case 'R':
+                bitboards[W_ROOK] |= ONE_64 << j;
+                board[x][y] = W_ROOK;
+                break;
+            case 'N':
+                bitboards[W_KNIGHT] |= ONE_64 << j;
+                board[x][y] = W_KNIGHT;
+                break;
+            case 'B':
+                bitboards[W_BISHOP] |= ONE_64 << j;
+                board[x][y] = W_BISHOP;
+                break;
+            case 'Q':
+                bitboards[W_QUEEN] |= ONE_64 << j;
+                board[x][y] = W_QUEEN;
+                break;
+            case 'K':
+                bitboards[W_KING] |= ONE_64 << j;
+                board[x][y] = W_KING;
+                break;
+
+            case 'p':
+                bitboards[B_PAWN] |= ONE_64 << j;
+                board[x][y] = B_PAWN;
+                break;
+            case 'r':
+                bitboards[B_ROOK] |= ONE_64 << j;
+                board[x][y] = B_ROOK;
+                break;
+            case 'n':
+                bitboards[B_KNIGHT] |= ONE_64 << j;
+                board[x][y] = B_KNIGHT;
+                break;
+            case 'b':
+                bitboards[B_BISHOP] |= ONE_64 << j;
+                board[x][y] = B_BISHOP;
+                break;
+            case 'q':
+                bitboards[B_QUEEN] |= ONE_64 << j;
+                board[x][y] = B_QUEEN;
+                break;
+            case 'k':
+                bitboards[B_KING] |= ONE_64 << j;
+                board[x][y] = B_KING;
+                break;
+
+            default:
+                break;
+
+        }
+
+        if (x + 1 >= BOARD_SIZE) {
+            x = 0;
+            y++;
+        } else {
+            x++;
+        }
+        
+        i++;
+    }
 
     // All bitboards (remember to keep these updated!)
     bitboards[W_ALL] = bitboards[W_PAWN] | bitboards[W_ROOK] | bitboards[W_KNIGHT] | bitboards[W_BISHOP] | bitboards[W_QUEEN] | bitboards[W_KING];
@@ -532,39 +605,81 @@ void init_pieces() {
         piece[i] = one << i;
     }
 
-    // debug_bitboard(piece[28]);
 
-    /* Setup display board */
+    // /* Setup bitboards */
 
-    // Clear board
-    memset(board, EMPTY, sizeof(board));
+    // // RIGHT shift is towards LSB and is equivalent to moving a piece LEFT.
+    // // White pieces are nearest LSB.
+    // // See mapping: http://pages.cs.wisc.edu/~psilord/blog/data/chess-pages/rep.html
 
-    // Pawns
-    uint8_t i;
-    for (i = 0; i < BOARD_SIZE; i++) {
-        board[i][1] = B_PAWN;
-        board[i][6] = W_PAWN;
-    }
+    // const uint64_t pawns = 0x0000;
+    // // const uint64_t pawns = 0xFF00;
+    // const uint64_t rooks = 0x81;
+    // const uint64_t knights = 0x00;
+    // // const uint64_t knights = 0x42;
+    // const uint64_t bishops = 0x24;
+    // const uint64_t queens = 0x8;
+    // const uint64_t kings = 0x10;
 
-    // Black pieces
-    board[0][0] = B_ROOK;
-    board[1][0] = B_KNIGHT;
-    board[2][0] = B_BISHOP;
-    board[3][0] = B_QUEEN;
-    board[4][0] = B_KING;
-    board[5][0] = B_BISHOP;
-    board[6][0] = B_KNIGHT;
-    board[7][0] = B_ROOK;
+    // // White bitboards
+    // bitboards[W_PAWN] =   pawns;
+    // bitboards[W_ROOK] =   rooks;
+    // bitboards[W_KNIGHT] = knights;
+    // bitboards[W_BISHOP] = bishops;
+    // bitboards[W_QUEEN] =  queens;
+    // bitboards[W_KING] =   kings;
 
-    // White pieces
-    board[0][7] = W_ROOK;
-    board[1][7] = W_KNIGHT;
-    board[2][7] = W_BISHOP;
-    board[3][7] = W_QUEEN;
-    board[4][7] = W_KING;
-    board[5][7] = W_BISHOP;
-    board[6][7] = W_KNIGHT;
-    board[7][7] = W_ROOK;
+    // // Black bitboards
+    // bitboards[B_PAWN] =   pawns << 40;
+    // bitboards[B_ROOK] =   rooks << 56;
+    // bitboards[B_KNIGHT] = knights << 56;
+    // bitboards[B_BISHOP] = bishops << 56;
+    // bitboards[B_QUEEN] =  queens << 56;
+    // bitboards[B_KING] =   kings << 56;
+
+    // // All bitboards (remember to keep these updated!)
+    // bitboards[W_ALL] = bitboards[W_PAWN] | bitboards[W_ROOK] | bitboards[W_KNIGHT] | bitboards[W_BISHOP] | bitboards[W_QUEEN] | bitboards[W_KING];
+    // bitboards[B_ALL] = bitboards[B_PAWN] | bitboards[B_ROOK] | bitboards[B_KNIGHT] | bitboards[B_BISHOP] | bitboards[B_QUEEN] | bitboards[B_KING];
+    // bitboards[WB_ALL] = bitboards[W_ALL] | bitboards[B_ALL];
+
+    // for (uint64_t i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+    //     uint64_t one = 1;
+    //     piece[i] = one << i;
+    // }
+
+    // // debug_bitboard(piece[28]);
+
+    // /* Setup display board */
+
+    // // Clear board
+    // memset(board, EMPTY, sizeof(board));
+
+    // // Pawns
+    // uint8_t i;
+    // for (i = 0; i < BOARD_SIZE; i++) {
+    //     board[i][1] = B_PAWN;
+    //     board[i][6] = W_PAWN;
+    // }
+
+    // // Black pieces
+    // board[0][0] = B_ROOK;
+    // board[1][0] = B_KNIGHT;
+    // board[2][0] = B_BISHOP;
+    // board[3][0] = B_QUEEN;
+    // board[4][0] = B_KING;
+    // board[5][0] = B_BISHOP;
+    // board[6][0] = B_KNIGHT;
+    // board[7][0] = B_ROOK;
+
+    // // White pieces
+    // board[0][7] = W_ROOK;
+    // board[1][7] = W_KNIGHT;
+    // board[2][7] = W_BISHOP;
+    // board[3][7] = W_QUEEN;
+    // board[4][7] = W_KING;
+    // board[5][7] = W_BISHOP;
+    // board[6][7] = W_KNIGHT;
+    // board[7][7] = W_ROOK;
 
 }
 
@@ -908,8 +1023,10 @@ uint64_t compute_black_attacked_minus_white_king() {
 
 }
 
-bool is_white_checked(uint64_t king_loc) {
+void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask) {
 
+    *capture_mask = 0;
+    *push_mask = 0;
 
     // Strategy: place enemy piece types on king position and see if they attack a real enemy piece
 
@@ -918,33 +1035,38 @@ bool is_white_checked(uint64_t king_loc) {
     // Pawns are a unique case as pawn attack direction is tightly coupled
     // Check if king were a WHITE pawn, would it attack a BLACK pawn?
     uint64_t pawn_move = compute_white_pawn(king_loc);
-    if (pawn_move & bitboards[B_PAWN]) return true;
+    *capture_mask |= pawn_move & bitboards[B_PAWN];
 
     // Knights
-    uint64_t knight_move = compute_knight(king_loc, bitboards[B_ALL]);
-    if (knight_move & bitboards[B_KNIGHT]) return true;
+    uint64_t knight_move = compute_knight(king_loc, bitboards[W_ALL]);
+    *capture_mask |= knight_move & bitboards[B_KNIGHT];
+
+    // For sliding pieces, we must also calculate a push mask to block checks
 
     // Bishops
-    uint64_t bishop_move = compute_bishop(king_loc, bitboards[B_ALL], white_minus_king);
-    if (bishop_move & bitboards[B_BISHOP]) return true;
+    uint64_t bishop_move = compute_bishop(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    *capture_mask |= bishop_move & bitboards[B_BISHOP];
+    // FIXME: Verify if this is correct?
+    *push_mask |= compute_bishop(king_loc, bitboards[B_BISHOP], white_minus_king) & bishop_move;
 
     // Rooks
-    uint64_t rook_move = compute_rook(king_loc, bitboards[B_ALL], white_minus_king);
-    if (rook_move & bitboards[B_ROOK]) return true;
+    uint64_t rook_move = compute_rook(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    *capture_mask |= rook_move & bitboards[B_ROOK];
+    *push_mask |= compute_rook(king_loc, bitboards[B_ROOK], white_minus_king) & rook_move;
 
     // Queens
-    uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], white_minus_king);
-    if (queen_move & bitboards[B_QUEEN]) return true;
+    uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    *capture_mask |= queen_move & bitboards[B_QUEEN];
+    *push_mask |= compute_queen(king_loc, bitboards[B_QUEEN], white_minus_king) & queen_move;
 
     // No need to check for kings as that's impossible.
-
-    return false;
-
-
 }
 
-bool is_black_checked(uint64_t king_loc) {
+void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask) {
 
+
+    *capture_mask = 0;
+    *push_mask = 0;
 
     // Strategy: place enemy piece types on king position and see if they attack a real enemy piece
 
@@ -952,28 +1074,32 @@ bool is_black_checked(uint64_t king_loc) {
     
     // Pawns are a unique case as pawn attack direction is tightly coupled
     // Check if king were a BLACK pawn, would it attack a WHITE pawn?
-    uint64_t pawn_move = compute_black_pawn(king_loc);
-    if (pawn_move & bitboards[W_PAWN]) return true;
+    // uint64_t pawn_move = compute_black_pawn(king_loc);
+    // *capture_mask |= pawn_move & bitboards[W_PAWN];
 
-    // Knights
-    uint64_t knight_move = compute_knight(king_loc, bitboards[W_ALL]);
-    if (knight_move & bitboards[W_KNIGHT]) return true;
+    // // Knights
+    // uint64_t knight_move = compute_knight(king_loc, bitboards[B_ALL]);
+    // *capture_mask |= knight_move & bitboards[W_KNIGHT];
 
-    // Bishops
-    uint64_t bishop_move = compute_bishop(king_loc, bitboards[W_ALL], black_minus_king);
-    if (bishop_move & bitboards[W_BISHOP]) return true;
+    // For sliding pieces, we must also calculate a push mask to block checks
+
+    // // Bishops
+    // uint64_t bishop_move = compute_bishop(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    // *capture_mask |= bishop_move & bitboards[W_BISHOP];
+    // // FIXME: Verify if this is correct?
+    // *push_mask |= compute_bishop(king_loc, bitboards[W_BISHOP], black_minus_king) & bishop_move;
 
     // Rooks
-    uint64_t rook_move = compute_rook(king_loc, bitboards[W_ALL], black_minus_king);
-    if (rook_move & bitboards[W_ROOK]) return true;
+    // FIXME: The push mask should EXCLUDE the piece (needed for en passant checks)
+    uint64_t rook_move = compute_rook(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    *capture_mask |= rook_move & bitboards[W_ROOK];
+    // Set bits BETWEEN the rook and king. Take conjunction of rook moves from both positions!
+    *push_mask |= rook_move & compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL] & ~bitboards[B_KING]);
 
-    // Queens
-    uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], black_minus_king);
-    if (queen_move & bitboards[W_QUEEN]) return true;
-
-    // No need to check for kings as that's impossible.
-
-    return false;
+    // // Queens
+    // uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    // *capture_mask |= queen_move & bitboards[W_QUEEN];
+    // *push_mask |= compute_queen(king_loc, bitboards[W_QUEEN], black_minus_king) & queen_move;
 
 
 }

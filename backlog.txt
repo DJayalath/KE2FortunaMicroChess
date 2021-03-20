@@ -1,0 +1,1 @@
+- For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
