@@ -262,15 +262,15 @@ int main() {
 
     cli();
 
-    // const char* board_rep =
-    //     "rnbqkbnr"
-    //     "pppppppp"
-    //     "........"
-    //     "........"
-    //     "........"
-    //     "........"
-    //     "PPPPPPPP"
-    //     "RNBQKBNR";
+    const char* board_rep =
+        "rnbqkbnr"
+        "pppppppp"
+        "........"
+        "........"
+        "........"
+        "........"
+        "PPPPPPPP"
+        "RNBQKBNR";
     
     // const char* board_rep = 
     //     "....k..."
@@ -292,15 +292,15 @@ int main() {
     //     "........"
     //     "....K...";
 
-    const char* board_rep = 
-        "k......R"
-        "........"
-        "........"
-        "....q..."
-        "........"
-        "....R..."
-        "........"
-        "....K...";
+    // const char* board_rep = 
+    //     "k......R"
+    //     "........"
+    //     "........"
+    //     "....q..."
+    //     "........"
+    //     "....R..."
+    //     "........"
+    //     "....K...";
 
     // Draw basic components
     draw_board();
@@ -989,7 +989,7 @@ uint64_t compute_black_pawn(uint64_t pawn_loc) {
     // Right attacks (considering overflow on file H)
     uint64_t right_att = (pawn_loc & clear_file[FILE_H]) >> 7;
 
-    uint64_t valid_att = (left_att | right_att) & bitboards[B_ALL];
+    uint64_t valid_att = (left_att | right_att) & bitboards[W_ALL];
 
     // -- Combine --
 
