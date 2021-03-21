@@ -1,4 +1,13 @@
-- For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
+-- URGENT --
+-- Difference between ATTACKED and MOVEABLE needed for computing king pin capture masks
+
+-- TODO --
 - En passant blocks and captures
 - En passant discovered check
 - Castling
+
+-- MAYBE --
+- Check / Checkmate highlighting?
+
+-- DONE --
+- For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
