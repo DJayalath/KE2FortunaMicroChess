@@ -280,8 +280,18 @@ int main() {
     //     "........"
     //     "....K...";
 
+    // const char* board_rep = 
+    //     ".k......"
+    //     "........"
+    //     "........"
+    //     "....q..."
+    //     "........"
+    //     "....R..."
+    //     "........"
+    //     "....K...";
+
     const char* board_rep = 
-        ".k......"
+        "k......R"
         "........"
         "........"
         "....q..."
@@ -292,11 +302,11 @@ int main() {
 
     // Draw basic components
     draw_board();
-    draw_pieces();
     draw_credits();
 
-    // Initialise the board
+    // Initialise and draw the board
     init_pieces(board_rep);
+    draw_pieces();
 
     sei();
     for (;;) {
@@ -802,12 +812,14 @@ uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side) {
 
     // If bits (NOT necessarily the piece) are moving right by more than one,
     // we should clip.
-    uint64_t pos_1 = king_clip_h << 7; // NW
+    uint64_t pos_1 = king_clip_a << 7; // NW
+    // uint64_t pos_1 = king_clip_h << 7; // NW
     uint64_t pos_2 = king_loc << 8; // N
     uint64_t pos_3 = king_clip_h << 9; // NE
     uint64_t pos_4 = king_clip_h << 1;
 
-    uint64_t pos_5 = king_clip_a >> 7;
+    uint64_t pos_5 = king_clip_h >> 7;
+    // uint64_t pos_5 = king_clip_a >> 7;
     uint64_t pos_6 = king_loc >> 8;
     uint64_t pos_7 = king_clip_a >> 9;
     uint64_t pos_8 = king_clip_a >> 1;
@@ -1243,7 +1255,14 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     // Then, if the overlap contains the piece in quesiton, it is pinned.
     // The overlapping ray is then the pin mask.
 
+    // ASSUMPTION: Pieces can't be double-pinned to the king right?
+    // I can't think of a way this is possible. If I'm wrong, then this is broken.
+
+    // TODO: Each pin should include position of attacking piece as well
+    // so it can be taken
+
     uint64_t pin_mask = 0;
+    uint64_t capture_mask = 0;
 
     uint64_t white_excluded = bitboards[W_ALL] & ~piece;
 
@@ -1252,32 +1271,60 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     uint64_t p = compute_black_pawn(bitboards[B_PAWN]);
     uint64_t p_from_k = compute_white_pawn(bitboards[W_KING]);
     if (piece & p & p_from_k) {
-        pin_mask |= piece & p & p_from_k;
+        pin_mask |= ~piece & p & p_from_k;
+        capture_mask |= p_from_k & bitboards[B_PAWN];
+        return pin_mask | capture_mask;
     }
 
     // B
     uint64_t b = compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], white_excluded);
     uint64_t b_from_k = compute_bishop(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
     if (piece & b & b_from_k) {
-        pin_mask |= piece & b & b_from_k;
+        pin_mask |= ~piece & b & b_from_k;
+        capture_mask |= b_from_k & bitboards[B_BISHOP];
+        return pin_mask | capture_mask;
     }
 
     // R
     uint64_t r = compute_rook(bitboards[B_ROOK], bitboards[B_ALL], white_excluded);
     uint64_t r_from_k = compute_rook(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
     if (piece & r & r_from_k) {
-        pin_mask |= piece & r & r_from_k;
+        pin_mask |= ~piece & r & r_from_k;
+        capture_mask |= r_from_k & bitboards[B_ROOK];
+        return pin_mask | capture_mask;
     }
 
-    // Q
-    uint64_t q = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
-    uint64_t q_from_k = compute_queen(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
-    if (piece & q & q_from_k) {
-        pin_mask |= q & q_from_k;
+    // Queen diagonals
+    uint64_t qd = compute_bishop(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
+    uint64_t qd_from_k = compute_bishop(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    if (piece & qd & qd_from_k) {
+        pin_mask |= qd & qd_from_k & ~piece;
+        capture_mask |= qd_from_k & bitboards[B_QUEEN];
+        return pin_mask | capture_mask;
     }
+
+    // Queen non-diagonals
+    uint64_t qn = compute_rook(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
+    uint64_t qn_from_k = compute_rook(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    if (piece & qn & qn_from_k) {
+        pin_mask |= ~piece & qn & qn_from_k;
+        capture_mask |= qn_from_k & bitboards[B_QUEEN];
+        return pin_mask | capture_mask;
+    }
+
+    // ASSUMPTION 2: There is no need to compute for a queen again here, this case is covered
+    // by rook and bishops computations above.
+
+    // // Q
+    // uint64_t q = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
+    // uint64_t q_from_k = compute_queen(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    // if (piece & q & q_from_k) {
+    //     pin_mask |= q & q_from_k;
+    //     return pin_mask;
+    // }
     
 
-    return pin_mask;
+    return ~pin_mask;
 
 }
 
@@ -1290,6 +1337,7 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     // The overlapping ray is then the pin mask.
 
     uint64_t pin_mask = 0;
+    uint64_t capture_mask = 0;
 
     uint64_t black_excluded = bitboards[B_ALL] & ~piece;
 
@@ -1298,7 +1346,9 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     uint64_t p = compute_white_pawn(bitboards[W_PAWN]);
     uint64_t p_from_k = compute_black_pawn(bitboards[B_KING]);
     if (piece & p & p_from_k) {
-        pin_mask |= piece & p & p_from_k;
+        pin_mask |= ~piece & p & p_from_k;
+        capture_mask |= p_from_k & bitboards[W_PAWN];
+        return pin_mask | capture_mask;
     }
 
 
@@ -1306,7 +1356,9 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     uint64_t b = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], black_excluded);
     uint64_t b_from_k = compute_bishop(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
     if (piece & b & b_from_k) {
-        pin_mask |= piece & b & b_from_k;
+        pin_mask |= ~piece & b & b_from_k;
+        capture_mask |= b_from_k & bitboards[W_BISHOP];
+        return pin_mask | capture_mask;
     }
     
 
@@ -1314,18 +1366,39 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     uint64_t r = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], black_excluded);
     uint64_t r_from_k = compute_rook(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
     if (piece & r & r_from_k) {
-        pin_mask |= piece & r & r_from_k;
+        pin_mask |= ~piece & r & r_from_k;
+        capture_mask |= r_from_k & bitboards[W_ROOK];
+        return pin_mask | capture_mask;
+    }
+
+    // Queen diagonals
+    uint64_t qd = compute_bishop(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
+    uint64_t qd_from_k = compute_bishop(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    if (piece & qd & qd_from_k) {
+        pin_mask |= qd & qd_from_k & ~piece;
+        capture_mask |= qd_from_k & bitboards[W_QUEEN];
+        return pin_mask | capture_mask;
+    }
+
+    // Queen non-diagonals
+    uint64_t qn = compute_rook(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
+    uint64_t qn_from_k = compute_rook(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    if (piece & qn & qn_from_k) {
+        pin_mask |= ~piece & qn & qn_from_k;
+        capture_mask |= qn_from_k & bitboards[W_QUEEN];
+        return pin_mask | capture_mask;
     }
     
 
-    // Q
-    uint64_t q = compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
-    uint64_t q_from_k = compute_queen(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
-    if (piece & q & q_from_k) {
-        pin_mask |= q & q_from_k;
-    }
+    // // Q
+    // uint64_t q = compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
+    // uint64_t q_from_k = compute_queen(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    // if (piece & q & q_from_k) {
+    //     pin_mask |= q & q_from_k;
+    //     return pin_mask;
+    // }
     
 
-    return pin_mask;
+    return ~pin_mask;
 
 }
