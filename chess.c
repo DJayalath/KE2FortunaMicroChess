@@ -61,12 +61,25 @@ void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y);
 /* Move square computations */
 
 uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side);
-uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side);
-uint64_t compute_white_pawn(uint64_t pawn_loc);
-uint64_t compute_black_pawn(uint64_t pawn_loc);
-uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side);
-uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side);
-uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side);
+
+
+uint64_t knight_attacked(uint64_t knight_loc);
+uint64_t knight_moveable(uint64_t knight_loc, uint64_t own_side);
+
+uint64_t white_pawn_attacked(uint64_t pawn_loc);
+uint64_t white_pawn_moveable(uint64_t pawn_loc);
+
+uint64_t black_pawn_attacked(uint64_t pawn_loc);
+uint64_t black_pawn_moveable(uint64_t pawn_loc);
+
+uint64_t rook_attacked(uint64_t rook_loc, uint64_t all_pieces);
+uint64_t rook_moveable(uint64_t rook_loc, uint64_t own_side, uint64_t all_pieces);
+
+uint64_t bishop_attacked(uint64_t bishop_loc, uint64_t all_pieces);
+uint64_t bishop_moveable(uint64_t bishop_loc, uint64_t own_side, uint64_t all_pieces);
+
+uint64_t queen_attacked(uint64_t queen_loc, uint64_t all_pieces);
+uint64_t queen_moveable(uint64_t queen_loc, uint64_t own_side, uint64_t all_pieces);
 
 /* "King danger" square computations */
 
@@ -480,7 +493,7 @@ void poll_move_gen() {
 
             case B_KNIGHT:
 
-                open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
+                open_moves = knight_moveable(piece[rf], bitboards[B_ALL]);
                 apply_masks_black(piece[rf]);
 
                 break;
@@ -488,7 +501,7 @@ void poll_move_gen() {
 
             case W_KNIGHT:
 
-                open_moves = compute_knight(piece[rf], bitboards[W_ALL]);
+                open_moves = knight_moveable(piece[rf], bitboards[W_ALL]);
                 apply_masks_white(piece[rf]);
 
                 break;
@@ -496,56 +509,56 @@ void poll_move_gen() {
 
             case B_PAWN:
 
-                open_moves = compute_black_pawn(piece[rf]);
+                open_moves = black_pawn_moveable(piece[rf]);
                 apply_masks_black(piece[rf]);
 
                 break;
 
             case W_PAWN:
 
-                open_moves = compute_white_pawn(piece[rf]);
+                open_moves = white_pawn_moveable(piece[rf]);
                 apply_masks_white(piece[rf]);
 
                 break;
 
             case B_ROOK:
 
-                open_moves = compute_rook(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                open_moves = rook_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
                 apply_masks_black(piece[rf]);
 
                 break;
 
             case W_ROOK:
 
-                open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                open_moves = rook_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
                 apply_masks_white(piece[rf]);
 
                 break;
 
             case B_BISHOP:
 
-                open_moves = compute_bishop(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                open_moves = bishop_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
                 apply_masks_black(piece[rf]);
 
                 break;
 
             case W_BISHOP:
 
-                open_moves = compute_bishop(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                open_moves = bishop_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
                 apply_masks_white(piece[rf]);
 
                 break;
 
             case B_QUEEN:
 
-                open_moves = compute_queen(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                open_moves = queen_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
                 apply_masks_black(piece[rf]);
 
                 break;
 
             case W_QUEEN:
 
-                open_moves = compute_queen(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                open_moves = queen_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
                 apply_masks_white(piece[rf]);
 
                 break;
@@ -909,8 +922,8 @@ uint64_t compute_king_incomplete(uint64_t king_loc, uint64_t own_side) {
     return king_moves & ~own_side;
 }
 
-/* Compute the bitboard of valid moves for a knight */
-uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
+/* Set of squares attacked by a knight */
+uint64_t knight_attacked(uint64_t knight_loc) {
 
     // Account for file overflow/underflow
     uint64_t clip_1 = clear_file[FILE_A] & clear_file[FILE_B];
@@ -932,16 +945,32 @@ uint64_t compute_knight(uint64_t knight_loc, uint64_t own_side) {
     uint64_t pos_7 = (knight_loc & clip_7) >> 17;
     uint64_t pos_8 = (knight_loc & clip_8) >> 10;
 
-    uint64_t knight_moves = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
-    uint64_t knight_valid = knight_moves & ~own_side;
+    uint64_t knight_attacked = pos_1 | pos_2 | pos_3 | pos_4 | pos_5 | pos_6 | pos_7 | pos_8;
 
-    return knight_valid;
+    return knight_attacked;
 }
 
-/* Compute the bitboard of valid moves for a white pawn */
-uint64_t compute_white_pawn(uint64_t pawn_loc) {
+/* Set of squares a knight can move to */
+uint64_t knight_moveable(uint64_t knight_loc, uint64_t own_side) {
+    return knight_attacked(knight_loc) & ~own_side;
+}
 
-    // -- Calculate pawn moves --
+/* Set of squares attacked by a white pawn */
+uint64_t white_pawn_attacked(uint64_t pawn_loc) {
+
+    // Left and right attacks
+    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) << 7;
+    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) << 9;
+
+    // TODO: En passant
+
+    return left_att | right_att;
+}
+
+/* Set of squares a white pawn can move to */
+uint64_t white_pawn_moveable(uint64_t pawn_loc) {
+
+    // Calculate pawn moves
 
     // Single space in front of pawn
     uint64_t one_step = (pawn_loc << 8) & ~bitboards[WB_ALL];
@@ -950,28 +979,26 @@ uint64_t compute_white_pawn(uint64_t pawn_loc) {
     uint64_t two_step = ((one_step & mask_rank[RANK_3]) << 8) & ~bitboards[WB_ALL];
 
     uint64_t valid_moves = one_step | two_step;
+    uint64_t valid_att = white_pawn_attacked(pawn_loc) & bitboards[B_ALL];
 
-    // -- Calculate pawn attacks --
-
-    // Left attacks (considering underflow on file A)
-    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) << 7;
-
-    // Right attacks (considering overflow on file H)
-    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) << 9;
-
-    uint64_t valid_att = (left_att | right_att) & bitboards[B_ALL];
-
-    // -- Combine --
-
-    uint64_t valid = valid_moves | valid_att;
-
-    return valid;
+    return valid_moves | valid_att;
 }
 
-/* Compute the bitboard of valid moves for a black pawn */
-uint64_t compute_black_pawn(uint64_t pawn_loc) {
+/* Set of squares attacked by a black pawn */
+uint64_t black_pawn_attacked(uint64_t pawn_loc) {
 
-    // -- Calculate pawn moves --
+    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) >> 9;
+    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) >> 7;
+
+    // TODO: En passant
+
+    return left_att | right_att;
+}
+
+/* Set of squares a black pawn can move to */
+uint64_t black_pawn_moveable(uint64_t pawn_loc) {
+
+    // Calculate pawn moves
 
     // Single space in front of pawn
     uint64_t one_step = (pawn_loc >> 8) & ~bitboards[WB_ALL];
@@ -980,26 +1007,13 @@ uint64_t compute_black_pawn(uint64_t pawn_loc) {
     uint64_t two_step = ((one_step & mask_rank[RANK_6]) >> 8) & ~bitboards[WB_ALL];
 
     uint64_t valid_moves = one_step | two_step;
+    uint64_t valid_att = black_pawn_attacked(pawn_loc) & bitboards[W_ALL];
 
-    // -- Calculate pawn attacks --
-
-    // Left attacks (considering underflow on file A)
-    uint64_t left_att = (pawn_loc & clear_file[FILE_A]) >> 9;
-
-    // Right attacks (considering overflow on file H)
-    uint64_t right_att = (pawn_loc & clear_file[FILE_H]) >> 7;
-
-    uint64_t valid_att = (left_att | right_att) & bitboards[W_ALL];
-
-    // -- Combine --
-
-    uint64_t valid = valid_moves | valid_att;
-
-    return valid;
+    return valid_moves | valid_att;
 }
 
-/* Compute the bitboard of valid moves for a rook */
-uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side) {
+/* Set of squares attacked by a rook */
+uint64_t rook_attacked(uint64_t rook_loc, uint64_t all_pieces) {
 
     // Rays are horizontal and vertical
     // => We can use masks!
@@ -1008,8 +1022,6 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     // Would require 8 * 256 * 8 * 2 = 33kB > 8kB RAM for all combinations.
 
     // We need to stop the ray as soon as it hits the first enemy piece
-
-    uint64_t all_pieces = own_side | enemy_side;
 
     uint64_t valid = 0;
 
@@ -1021,28 +1033,16 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             int8_t p = rf;
             while (p + 8 < BOARD_SIZE * BOARD_SIZE) {
                 p += 8;
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
             // Build downward ray
             p = rf;
             while (p - 8 >= 0) {
                 p -= 8;
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
             uint8_t left_edge = (rf / BOARD_SIZE) * BOARD_SIZE;
@@ -1052,28 +1052,16 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
             p = rf;
             while ((p + 1) <= right_edge) {
                 p++;
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
-            // Build left ray (BROKEN)
+            // Build left ray
             p = rf;
             while ((p - 1) >= left_edge) {
                 p--;
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
         }
@@ -1083,9 +1071,13 @@ uint64_t compute_rook(uint64_t rook_loc, uint64_t own_side, uint64_t enemy_side)
     return valid;
 }
 
-uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_side) {
+/* Set of squares a rook can move to */
+uint64_t rook_moveable(uint64_t rook_loc, uint64_t own_side, uint64_t all_pieces) {
+    return rook_attacked(rook_loc, all_pieces) & ~own_side;
+}
 
-    uint64_t all_pieces = own_side | enemy_side;
+/* Set of squares attacked by a bishop */
+uint64_t bishop_attacked(uint64_t bishop_loc, uint64_t all_pieces) {
 
     uint64_t valid = 0;
 
@@ -1105,14 +1097,8 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp++;
                 y_tmp--;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
             x_tmp = x;
@@ -1123,14 +1109,8 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp--;
                 y_tmp--;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
             x_tmp = x;
@@ -1141,14 +1121,8 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp--;
                 y_tmp++;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
             x_tmp = x;
@@ -1159,14 +1133,8 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
                 x_tmp++;
                 y_tmp++;
                 p = dp_to_rf(x_tmp, y_tmp);
-                if (piece[p] & all_pieces) {
-                    if (piece[p] & enemy_side) {
-                        valid |= piece[p];
-                    }
-                    break;
-                } else {
-                    valid |= piece[p];
-                }
+                valid |= piece[p];
+                if (piece[p] & all_pieces) break;
             }
 
 
@@ -1178,29 +1146,33 @@ uint64_t compute_bishop(uint64_t bishop_loc, uint64_t own_side, uint64_t enemy_s
 
 }
 
-uint64_t compute_queen(uint64_t queen_loc, uint64_t own_side, uint64_t enemy_side) {
+/* Set of squares a bishop can move to */
+uint64_t bishop_moveable(uint64_t bishop_loc, uint64_t own_side, uint64_t all_pieces) {
+    return bishop_attacked(bishop_loc, all_pieces) & ~own_side;
+}
 
-    // Compute rook subset of moves
-    uint64_t rook_moves = compute_rook(queen_loc, own_side, enemy_side);
+/* Set of squares attacked by a queen */
+uint64_t queen_attacked(uint64_t queen_loc, uint64_t all_pieces) {
+    return rook_attacked(queen_loc, all_pieces) | bishop_attacked(queen_loc, all_pieces);
+}
 
-    // Compute bishop subset of moves
-    uint64_t bishop_moves = compute_bishop(queen_loc, own_side, enemy_side);
-
-    return bishop_moves | rook_moves;
+/* Set of squares a queen can move to */
+uint64_t queen_moveable(uint64_t queen_loc, uint64_t own_side, uint64_t all_pieces) {
+    return queen_attacked(queen_loc, all_pieces) & ~own_side;
 }
 
 uint64_t compute_white_attacked_minus_black_king() {
 
     // Non-sliders can be computed as usual
-    uint64_t pawns = compute_white_pawn(bitboards[W_PAWN]);
+    uint64_t pawns = white_pawn_attacked(bitboards[W_PAWN]);
     uint64_t king = compute_king_incomplete(bitboards[W_KING], bitboards[W_ALL]);
-    uint64_t knights = compute_knight(bitboards[W_KNIGHT], bitboards[W_ALL]);
+    uint64_t knights = knight_attacked(bitboards[W_KNIGHT]);
 
     // Sliders must ignore the black king to invalidate moves away from slider attacks by black king
     uint64_t black_minus_king = bitboards[B_ALL] & ~bitboards[B_KING];
-    uint64_t rooks = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], black_minus_king);
-    uint64_t bishops = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], black_minus_king);
-    uint64_t queens = compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], black_minus_king);
+    uint64_t rooks = rook_attacked(bitboards[W_ROOK], bitboards[WB_ALL] & ~bitboards[B_KING]);
+    uint64_t bishops = bishop_attacked(bitboards[W_BISHOP], bitboards[WB_ALL] & ~bitboards[B_KING]);
+    uint64_t queens = queen_attacked(bitboards[W_QUEEN], bitboards[WB_ALL] & ~bitboards[B_KING]);
 
     return pawns | king | knights | rooks | bishops | queens;
 
@@ -1209,15 +1181,15 @@ uint64_t compute_white_attacked_minus_black_king() {
 uint64_t compute_black_attacked_minus_white_king() {
 
     // Non-sliders can be computed as usual
-    uint64_t pawns = compute_white_pawn(bitboards[B_PAWN]);
+    uint64_t pawns = black_pawn_attacked(bitboards[B_PAWN]);
     uint64_t king = compute_king_incomplete(bitboards[B_KING], bitboards[B_ALL]);
-    uint64_t knights = compute_knight(bitboards[B_KNIGHT], bitboards[B_ALL]);
+    uint64_t knights = knight_attacked(bitboards[B_KNIGHT]);
 
     // Sliders must ignore the black king to invalidate moves away from slider attacks by black king
     uint64_t white_minus_king = bitboards[W_ALL] & ~bitboards[W_KING];
-    uint64_t rooks = compute_rook(bitboards[B_ROOK], bitboards[B_ALL], white_minus_king);
-    uint64_t bishops = compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], white_minus_king);
-    uint64_t queens = compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], white_minus_king);
+    uint64_t rooks = rook_attacked(bitboards[B_ROOK], bitboards[WB_ALL] & ~bitboards[W_KING]);
+    uint64_t bishops = bishop_attacked(bitboards[B_BISHOP], bitboards[WB_ALL] & ~bitboards[W_KING]);
+    uint64_t queens = queen_attacked(bitboards[B_QUEEN], bitboards[WB_ALL] & ~bitboards[W_KING]);
 
     return pawns | king | knights | rooks | bishops | queens;
 
@@ -1232,30 +1204,30 @@ void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     
     // Pawns are a unique case as pawn attack direction is tightly coupled
     // Check if king were a WHITE pawn, would it attack a BLACK pawn?
-    uint64_t pawn_move = compute_white_pawn(king_loc);
+    uint64_t pawn_move = white_pawn_attacked(king_loc);
     *capture_mask |= pawn_move & bitboards[B_PAWN];
 
     // Knights
-    uint64_t knight_move = compute_knight(king_loc, bitboards[W_ALL]);
+    uint64_t knight_move = knight_attacked(king_loc);
     *capture_mask |= knight_move & bitboards[B_KNIGHT];
 
     // For sliding pieces, we must also calculate a push mask to block checks
 
     // Bishops
-    uint64_t bishop_move = compute_bishop(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    uint64_t bishop_move = bishop_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= bishop_move & bitboards[B_BISHOP];
     // FIXME: Verify if this is correct?
-    *push_mask |= bishop_move & compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
+    *push_mask |= bishop_move & bishop_attacked(bitboards[B_BISHOP], bitboards[WB_ALL]) & ~bitboards[W_KING];
 
     // Rooks
-    uint64_t rook_move = compute_rook(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    uint64_t rook_move = rook_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= rook_move & bitboards[B_ROOK];
-    *push_mask |= rook_move & compute_rook(bitboards[B_ROOK], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
+    *push_mask |= rook_move & rook_attacked(bitboards[B_ROOK], bitboards[WB_ALL]) & ~bitboards[W_KING];
 
     // Queens
-    uint64_t queen_move = compute_queen(king_loc, bitboards[W_ALL], bitboards[B_ALL]);
+    uint64_t queen_move = queen_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= queen_move & bitboards[B_QUEEN];
-    *push_mask |= queen_move & compute_queen(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[W_ALL]) & ~bitboards[W_KING];
+    *push_mask |= queen_move & queen_attacked(bitboards[B_QUEEN], bitboards[WB_ALL]) & ~bitboards[W_KING];
 
     // No need to check for kings as that's impossible.
 }
@@ -1269,30 +1241,30 @@ void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     
     // Pawns are a unique case as pawn attack direction is tightly coupled
     // Check if king were a BLACK pawn, would it attack a WHITE pawn?
-    uint64_t pawn_move = compute_black_pawn(king_loc);
+    uint64_t pawn_move = black_pawn_attacked(king_loc);
     *capture_mask |= pawn_move & bitboards[W_PAWN];
 
     // Knights
-    uint64_t knight_move = compute_knight(king_loc, bitboards[B_ALL]);
+    uint64_t knight_move = knight_attacked(king_loc);
     *capture_mask |= knight_move & bitboards[W_KNIGHT];
 
     // For sliding pieces, we must also calculate a push mask to block checks
 
     // Bishops
-    uint64_t bishop_move = compute_bishop(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    uint64_t bishop_move = bishop_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= bishop_move & bitboards[W_BISHOP];
-    *push_mask |= bishop_move & compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
+    *push_mask |= bishop_move & bishop_attacked(bitboards[W_BISHOP], bitboards[WB_ALL]) & ~bitboards[B_KING];
 
     // Rooks
-    uint64_t rook_move = compute_rook(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    uint64_t rook_move = rook_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= rook_move & bitboards[W_ROOK];
     // Set bits BETWEEN the rook and king. Take conjunction of rook moves from both positions!
-    *push_mask |= rook_move & compute_rook(bitboards[W_ROOK], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
+    *push_mask |= rook_move & rook_attacked(bitboards[W_ROOK], bitboards[WB_ALL]) & ~bitboards[B_KING];
 
     // Queens
-    uint64_t queen_move = compute_queen(king_loc, bitboards[B_ALL], bitboards[W_ALL]);
+    uint64_t queen_move = queen_attacked(king_loc, bitboards[WB_ALL]);
     *capture_mask |= queen_move & bitboards[W_QUEEN];
-    *push_mask |= queen_move & compute_queen(bitboards[W_QUEEN], bitboards[W_ALL], bitboards[B_ALL]) & ~bitboards[B_KING];
+    *push_mask |= queen_move & queen_attacked(bitboards[W_QUEEN], bitboards[WB_ALL]) & ~bitboards[B_KING];
 
 }
 
@@ -1347,8 +1319,8 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
 
     // P
     // TODO: Check if this needs to use excluded white like the others.
-    uint64_t p = compute_black_pawn(bitboards[B_PAWN]);
-    uint64_t p_from_k = compute_white_pawn(bitboards[W_KING]);
+    uint64_t p = black_pawn_moveable(bitboards[B_PAWN]);
+    uint64_t p_from_k = white_pawn_moveable(bitboards[W_KING]);
     if (piece & p & p_from_k) {
         pin_mask |= ~piece & p & p_from_k;
         capture_mask |= p_from_k & bitboards[B_PAWN];
@@ -1356,8 +1328,8 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     }
 
     // B
-    uint64_t b = compute_bishop(bitboards[B_BISHOP], bitboards[B_ALL], white_excluded);
-    uint64_t b_from_k = compute_bishop(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    uint64_t b = bishop_attacked(bitboards[B_BISHOP], bitboards[WB_ALL] & ~piece);
+    uint64_t b_from_k = bishop_attacked(bitboards[W_KING], bitboards[WB_ALL] & ~piece);
     if (piece & b & b_from_k) {
         pin_mask |= ~piece & b & b_from_k;
         capture_mask |= b_from_k & bitboards[B_BISHOP];
@@ -1365,8 +1337,8 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     }
 
     // R
-    uint64_t r = compute_rook(bitboards[B_ROOK], bitboards[B_ALL], white_excluded);
-    uint64_t r_from_k = compute_rook(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    uint64_t r = rook_attacked(bitboards[B_ROOK], bitboards[WB_ALL] & ~piece);
+    uint64_t r_from_k = rook_attacked(bitboards[W_KING], bitboards[WB_ALL] & ~piece);
     if (piece & r & r_from_k) {
         pin_mask |= ~piece & r & r_from_k;
         capture_mask |= r_from_k & bitboards[B_ROOK];
@@ -1374,8 +1346,8 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     }
 
     // Queen diagonals
-    uint64_t qd = compute_bishop(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
-    uint64_t qd_from_k = compute_bishop(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    uint64_t qd = bishop_attacked(bitboards[B_QUEEN], bitboards[WB_ALL] & ~piece);
+    uint64_t qd_from_k = bishop_attacked(bitboards[W_KING], bitboards[WB_ALL] & ~piece);
     if (piece & qd & qd_from_k) {
         pin_mask |= qd & qd_from_k & ~piece;
         capture_mask |= qd_from_k & bitboards[B_QUEEN];
@@ -1383,8 +1355,8 @@ uint64_t compute_pin_mask_white(uint64_t piece) {
     }
 
     // Queen non-diagonals
-    uint64_t qn = compute_rook(bitboards[B_QUEEN], bitboards[B_ALL], white_excluded);
-    uint64_t qn_from_k = compute_rook(bitboards[W_KING], white_excluded, bitboards[B_ALL]);
+    uint64_t qn = rook_attacked(bitboards[B_QUEEN], bitboards[WB_ALL] & ~piece);
+    uint64_t qn_from_k = rook_attacked(bitboards[W_KING], bitboards[WB_ALL] & ~piece);
     if (piece & qn & qn_from_k) {
         pin_mask |= ~piece & qn & qn_from_k;
         capture_mask |= qn_from_k & bitboards[B_QUEEN];
@@ -1422,8 +1394,8 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
 
     // P
     // TODO: Check if this needs to use excluded white like the others.
-    uint64_t p = compute_white_pawn(bitboards[W_PAWN]);
-    uint64_t p_from_k = compute_black_pawn(bitboards[B_KING]);
+    uint64_t p = white_pawn_moveable(bitboards[W_PAWN]);
+    uint64_t p_from_k = black_pawn_moveable(bitboards[B_KING]);
     if (piece & p & p_from_k) {
         pin_mask |= ~piece & p & p_from_k;
         capture_mask |= p_from_k & bitboards[W_PAWN];
@@ -1432,8 +1404,8 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
 
 
     // B
-    uint64_t b = compute_bishop(bitboards[W_BISHOP], bitboards[W_ALL], black_excluded);
-    uint64_t b_from_k = compute_bishop(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    uint64_t b = bishop_attacked(bitboards[W_BISHOP], bitboards[WB_ALL] & ~piece);
+    uint64_t b_from_k = bishop_attacked(bitboards[B_KING], bitboards[WB_ALL] & ~piece);
     if (piece & b & b_from_k) {
         pin_mask |= ~piece & b & b_from_k;
         capture_mask |= b_from_k & bitboards[W_BISHOP];
@@ -1442,8 +1414,8 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     
 
     // R
-    uint64_t r = compute_rook(bitboards[W_ROOK], bitboards[W_ALL], black_excluded);
-    uint64_t r_from_k = compute_rook(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    uint64_t r = rook_attacked(bitboards[W_ROOK], bitboards[WB_ALL] & ~piece);
+    uint64_t r_from_k = rook_attacked(bitboards[B_KING], bitboards[WB_ALL] & ~piece);
     if (piece & r & r_from_k) {
         pin_mask |= ~piece & r & r_from_k;
         capture_mask |= r_from_k & bitboards[W_ROOK];
@@ -1451,8 +1423,8 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     }
 
     // Queen diagonals
-    uint64_t qd = compute_bishop(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
-    uint64_t qd_from_k = compute_bishop(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    uint64_t qd = bishop_attacked(bitboards[W_QUEEN], bitboards[WB_ALL] & ~piece);
+    uint64_t qd_from_k = bishop_attacked(bitboards[B_KING], bitboards[WB_ALL] & ~piece);
     if (piece & qd & qd_from_k) {
         pin_mask |= qd & qd_from_k & ~piece;
         capture_mask |= qd_from_k & bitboards[W_QUEEN];
@@ -1460,8 +1432,8 @@ uint64_t compute_pin_mask_black(uint64_t piece) {
     }
 
     // Queen non-diagonals
-    uint64_t qn = compute_rook(bitboards[W_QUEEN], bitboards[W_ALL], black_excluded);
-    uint64_t qn_from_k = compute_rook(bitboards[B_KING], black_excluded, bitboards[W_ALL]);
+    uint64_t qn = rook_attacked(bitboards[W_QUEEN], bitboards[WB_ALL] & ~piece);
+    uint64_t qn_from_k = rook_attacked(bitboards[B_KING], bitboards[WB_ALL] & ~piece);
     if (piece & qn & qn_from_k) {
         pin_mask |= ~piece & qn & qn_from_k;
         capture_mask |= qn_from_k & bitboards[W_QUEEN];
