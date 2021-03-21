@@ -83,6 +83,9 @@ void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
 uint64_t compute_pin_mask_white(uint64_t piece);
 uint64_t compute_pin_mask_black(uint64_t piece);
 
+void apply_masks_white(uint64_t piece);
+void apply_masks_black(uint64_t piece);
+
 /* Representational piece movement */
 
 void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t t, uint8_t own_side, uint8_t enemy_side);
@@ -454,56 +457,100 @@ void poll_move_gen() {
 
         switch(board[selector.lock_x][selector.lock_y]) {
 
-            // OK, Idiot.
             case EMPTY:
+
+                // OK, Idiot.
+
                 open_valid = 1;
                 return;
             
+
             case B_KING:
+
                 open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]) &
                              ~compute_white_attacked_minus_black_king();
                 break;
+
+
             case W_KING:
+
                 open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]) &
                              ~compute_black_attacked_minus_white_king();
                 break;
+
+
             case B_KNIGHT:
-                is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
+
                 open_moves = compute_knight(piece[rf], bitboards[B_ALL]);
-                // debug_bitboard(capture_mask);
-                if (capture_mask) {
-                    open_moves &= capture_mask | push_mask;
-                }
+                apply_masks_black(piece[rf]);
+
                 break;
+
+
             case W_KNIGHT:
+
                 open_moves = compute_knight(piece[rf], bitboards[W_ALL]);
+                apply_masks_white(piece[rf]);
+
                 break;
-            case W_PAWN:
-                open_moves = compute_white_pawn(piece[rf]);
-                break;
+
+
             case B_PAWN:
+
                 open_moves = compute_black_pawn(piece[rf]);
+                apply_masks_black(piece[rf]);
+
                 break;
+
+            case W_PAWN:
+
+                open_moves = compute_white_pawn(piece[rf]);
+                apply_masks_white(piece[rf]);
+
+                break;
+
             case B_ROOK:
+
                 open_moves = compute_rook(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                apply_masks_black(piece[rf]);
+
                 break;
+
             case W_ROOK:
-                pin_mask = compute_pin_mask_white(piece[rf]);
+
                 open_moves = compute_rook(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
-                open_moves &= pin_mask;
+                apply_masks_white(piece[rf]);
+
                 break;
+
             case B_BISHOP:
+
                 open_moves = compute_bishop(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                apply_masks_black(piece[rf]);
+
                 break;
+
             case W_BISHOP:
+
                 open_moves = compute_bishop(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                apply_masks_white(piece[rf]);
+
                 break;
+
             case B_QUEEN:
+
                 open_moves = compute_queen(piece[rf], bitboards[B_ALL], bitboards[W_ALL]);
+                apply_masks_black(piece[rf]);
+
                 break;
+
             case W_QUEEN:
+
                 open_moves = compute_queen(piece[rf], bitboards[W_ALL], bitboards[B_ALL]);
+                apply_masks_white(piece[rf]);
+
                 break;
+
             default:
                 break;
 
@@ -515,6 +562,40 @@ void poll_move_gen() {
         // Validate open move buffer
         open_valid = 1;
     }
+}
+
+void apply_masks_white(uint64_t piece) {
+
+    uint64_t capture_mask = 0;
+    uint64_t push_mask = 0;
+    uint64_t pin_mask = 0;
+
+    is_white_checked(bitboards[W_KING], &capture_mask, &push_mask);
+    pin_mask = compute_pin_mask_white(piece);
+
+    if (capture_mask) {
+        open_moves &= capture_mask | push_mask;
+    }
+
+    open_moves &= pin_mask & ~bitboards[B_KING];
+
+}
+
+void apply_masks_black(uint64_t piece) {
+
+    uint64_t capture_mask = 0;
+    uint64_t push_mask = 0;
+    uint64_t pin_mask = 0;
+
+    is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
+    pin_mask = compute_pin_mask_black(piece);
+
+    if (capture_mask) {
+        open_moves &= capture_mask | push_mask;
+    }
+    
+    open_moves &= pin_mask & ~bitboards[W_KING];
+
 }
 
 /* Resets the colours of the current open move squares */
