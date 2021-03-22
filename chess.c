@@ -1370,6 +1370,21 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
     // Destination piece type
     uint8_t u = board[qx][qy];
 
+    // Update castling rights
+    if (t == W_KING) {
+        castle_flags &= ~(1 << CASTLE_WHITE_KINGSIDE) | ~(1 << CASTLE_WHITE_QUEENSIDE);
+    } else if (t == B_KING) {
+        castle_flags &= ~(1 << CASTLE_BLACK_KINGSIDE) | ~(1 << CASTLE_BLACK_QUEENSIDE);
+    } else if ( (t == W_ROOK && p == WHITE_KINGSIDE_ROOK) || (u == W_ROOK && q == WHITE_KINGSIDE_ROOK) ) {
+        castle_flags &= ~(1 << CASTLE_WHITE_KINGSIDE);
+    } else if ( (t == W_ROOK && p == WHITE_QUEENSIDE_ROOK) || (u == W_ROOK && q == WHITE_QUEENSIDE_ROOK) ) {
+        castle_flags &= ~(1 << CASTLE_WHITE_QUEENSIDE);
+    } else if ( (t == B_ROOK && p == BLACK_KINGSIDE_ROOK) || (u == B_ROOK && q == BLACK_KINGSIDE_ROOK) ) {
+        castle_flags &= ~(1 << CASTLE_BLACK_KINGSIDE);
+    } else if ( (t == B_ROOK && p == BLACK_QUEENSIDE_ROOK) || (u == B_ROOK && q == BLACK_QUEENSIDE_ROOK) ) {
+        castle_flags &= ~(1 << CASTLE_BLACK_QUEENSIDE);
+    }
+
     // Unset current position of moving piece
     bitboards[t] &= ~p;
     // Set new position of moving piece
