@@ -500,6 +500,15 @@ int main() {
     //     "........"
     //     "R...K..R";
 
+    sei();
+
+    draw_tile();
+    for (;;) {
+        if (~PINE & _BV(SWC)) break;
+    }
+
+    cli();
+
     // Draw basic components
     draw_board();
     draw_credits();
@@ -1124,6 +1133,47 @@ void draw_credits() {
         i++;
         p++;
     }
+}
+
+void draw_tile() {
+
+    cli();
+
+    // Fill entire screen
+
+    rectangle r;
+    r.top = 0;
+    r.bottom = 240;
+    r.left = 0;
+    r.right = 320;
+
+    fill_rectangle(r, LT_SQ_COL);
+
+    r.top += 2;
+    r.bottom -= 2;
+    r.left += 2;
+    r.right -= 2;
+
+    fill_rectangle(r, BLACK); 
+
+    display_string_xy("KE2 FORTUNA MICRO CHESS", 60, 40);
+
+    display_string_xy("Player vs Player", 60, 105);
+    display_string_xy("Player vs Gary Chess (coming soon)", 60, 125);
+
+    display_string_xy("(c) 2021 Dulhan Jayalath", 60, 210);
+
+    r.left = 180;
+    r.right = 185;
+    r.top = 105;
+    r.bottom = 110;
+
+    fill_rectangle(r, WHITE);
+
+
+
+    sei();
+
 }
 
 /* Display a bitboard on screen for debugging. */
