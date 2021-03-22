@@ -2,10 +2,6 @@
 -- Difference between ATTACKED and MOVEABLE needed for computing king pin capture masks
 
 -- TODO --
-- Sprites
-- Checkmate detection
-- Screens (Start, checkmate)
-- 2 Player setup
 - AI Engine
 - AI Engine setup
 - En passant blocks and captures
@@ -21,3 +17,8 @@
 - Castling 
     + deny castling into/through check
     + deny castling while in check
+- Sprites
+- Checkmate detection
+- Screens (Start, checkmate)
+- 2 Player setup
+- En passant

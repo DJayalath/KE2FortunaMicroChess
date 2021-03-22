@@ -130,8 +130,6 @@ const uint64_t BLACK_QUEENSIDE_KING_CASTLED = 0x0400000000000000;
 
 uint64_t en_passant =  0x000000FFFF000000;
 uint64_t non_passant = 0x0000000000000000;
-uint64_t buf_passant = 0;
-uint64_t confirm_passant = 0;
 
 /* Piece pinned to king mask computation */
 
@@ -673,10 +671,38 @@ void poll_selector() {
                 uint64_t move_set_black = 0;
                 uint64_t move_set_white = 0;
 
-                // Check if black just got mated
+                // Check if mated
                 is_black_checked(bitboards[B_KING], &capture_mask_black, &push_mask);
                 push_mask = 0;
                 is_white_checked(bitboards[W_KING], &capture_mask_white, &push_mask);
+
+                // Highlight checks
+                if (capture_mask_white) {
+
+                    // Find white king
+                    uint8_t x, y;
+                    for (uint8_t i = 0; i < 63; i++) {
+                        if ((bitboards[W_KING] >> i) & 1) {
+                            rf_to_dp(i, &x, &y);
+                        }
+                    }
+
+                    draw_square(x, y, RED);
+                    draw_piece(x, y);
+
+                } else if (capture_mask_black) {
+
+                    // Find black king
+                    uint8_t x, y;
+                    for (uint8_t i = 0; i < 63; i++) {
+                        if ((bitboards[B_KING] >> i) & 1) {
+                            rf_to_dp(i, &x, &y);
+                        }
+                    }
+
+                    draw_square(x, y, RED);
+                    draw_piece(x, y);
+                }
 
                 // Compute move set for all of black's pieces
 
@@ -1480,7 +1506,6 @@ uint64_t white_pawn_moveable(uint64_t pawn_loc) {
 
     // Compute en passant attacks
     uint64_t ep_att = white_pawn_attacked(pawn_loc & mask_rank[RANK_5]) & ((bitboards[B_PAWN] & en_passant) << 8);
-    buf_passant = ep_att;
 
     return valid_moves | valid_att | ep_att;
 }
@@ -1512,7 +1537,6 @@ uint64_t black_pawn_moveable(uint64_t pawn_loc) {
 
     // Compute en passant attacks
     uint64_t ep_att = black_pawn_attacked(pawn_loc & mask_rank[RANK_4]) & ((bitboards[W_PAWN] & en_passant) >> 8);
-    buf_passant = ep_att;
 
     return valid_moves | valid_att | ep_att;
 
