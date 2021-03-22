@@ -266,6 +266,116 @@ const uint64_t mask_file[BOARD_SIZE] = {
     0x8080808080808080
 };
 
+const char sprites[6][10*10] = {
+
+    ".........."
+    ".........."
+    ".........."
+    "....00...."
+    "...0000..."
+    "....00...."
+    "....00...."
+    "...0000..."
+    "..000000.."
+    "..........",
+
+    ".........."
+    "....0....."
+    "...000...."
+    "..000.00.."
+    "..0000000."
+    "...000...."
+    "...0000..."
+    "..00000..."
+    "..000000.."
+    "..........",
+
+    ".........."
+    "....00...."
+    "...00.0..."
+    "...0000..."
+    "....00...."
+    "....00...."
+    "....00...."
+    "...0000..."
+    "..000000.."
+    "..........",
+
+    ".........."
+    ".........."
+    "..0..0.0.."
+    "..000000.."
+    "...0000..."
+    "...0000..."
+    "...0000..."
+    "..000000.."
+    "..000000.."
+    "..........",
+
+
+    ".........."
+    "....00...."
+    ".00000000."
+    "..000000.."
+    "....00...."
+    "....00...."
+    "....00...."
+    "...0000..."
+    "..000000.."
+    "..........",
+
+    ".........."
+    "....00...."
+    "..000000.."
+    "....00...."
+    "....00...."
+    "...0000..."
+    "...0000..."
+    "...0000..."
+    "..000000.."
+    ".........."
+    
+
+
+};
+
+void draw_sprite(const char* sprite, uint8_t x, uint8_t y, uint8_t is_white) {
+
+    // Assume 10x10 sprites need expanding to 30x30 pixels
+    rectangle r;
+
+    r.top = SQ_SIZE * y;
+    r.bottom = r.top + 3; 
+
+    for (uint8_t i = 0; i < 10; i++) {
+
+        r.left = LEFT_OFFST + SQ_SIZE * x;
+        r.right = r.left + 3;
+
+        for (uint8_t j = 0; j < 10; j++) {
+
+            uint8_t k = i * 10 + j;
+
+            char c = sprite[k];
+
+            if (sprite[k] == '1')
+                fill_rectangle(r, BLACK);
+            else if (sprite[k] == '0') {
+                fill_rectangle(r, (is_white) ? WHITE : BLACK);
+            }
+
+            r.left += 3;
+            r.right += 3;
+
+        }
+
+        r.top += 3;
+        r.bottom += 3;
+    }
+
+
+}
+
 /* Handle rotary encoder changes on timer interrupts */
 ISR(TIMER1_COMPA_vect) {
 
@@ -983,8 +1093,13 @@ void draw_square(uint8_t x, uint8_t y, uint16_t colour) {
 /* Draw a single piece on the board */
 void draw_piece(uint8_t x, uint8_t y) {
     if (board[x][y]) {
-        display_curser_move(LEFT_OFFST + x * SQ_SIZE + 7, y * SQ_SIZE + 7); 
-        display_char(display_pieces[board[x][y]]); 
+        if (board[x][y] >= W_PAWN && board[x][y] <= W_KING) {
+            draw_sprite(sprites[board[x][y] - 1], x, y, 1);
+        } else if (board[x][y] >= B_PAWN && board[x][y] <= B_KING) {
+            draw_sprite(sprites[board[x][y] - 7], x, y, 0);
+        }
+        // display_curser_move(LEFT_OFFST + x * SQ_SIZE + 7, y * SQ_SIZE + 7); 
+        // display_char(display_pieces[board[x][y]]); 
     }
 }
 
