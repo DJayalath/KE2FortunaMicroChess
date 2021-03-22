@@ -6,6 +6,10 @@
 #include "unifiedLcd.h"
 #include "rotary.h"
 
+// Turn on debugging during execution
+// (see all the ifdef DEBUG statements for usage)
+#define DEBUG 1
+
 /* Board size constraints */
 
 #define BOARD_SIZE 8
@@ -90,6 +94,33 @@ uint64_t compute_black_attacked_minus_white_king();
 
 void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
 void is_black_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_mask);
+uint8_t is_double_checked(uint64_t capture_mask);
+
+/* Castling */
+
+uint64_t castle_set_white();
+uint64_t castle_set_black();
+void castle(uint64_t castle_square);
+
+const uint64_t WHITE_KING_INITIAL = 0x10;
+
+const uint64_t WHITE_KINGSIDE_ROOK =  0x80;
+const uint64_t WHITE_KINGSIDE_ROOK_CASTLED = 0x20;
+const uint64_t WHITE_KINGSIDE_KING_CASTLED = 0x40;
+
+const uint64_t WHITE_QUEENSIDE_ROOK = 0x1;
+const uint64_t WHITE_QUEENSIDE_ROOK_CASTLED = 0x8;
+const uint64_t WHITE_QUEENSIDE_KING_CASTLED = 0x4;
+
+const uint64_t BLACK_KING_INITIAL = 0x1000000000000000;
+
+const uint64_t BLACK_KINGSIDE_ROOK =         0x8000000000000000;
+const uint64_t BLACK_KINGSIDE_ROOK_CASTLED = 0x2000000000000000;
+const uint64_t BLACK_KINGSIDE_KING_CASTLED = 0x4000000000000000;
+
+const uint64_t BLACK_QUEENSIDE_ROOK =         0x0100000000000000;
+const uint64_t BLACK_QUEENSIDE_ROOK_CASTLED = 0x0800000000000000;
+const uint64_t BLACK_QUEENSIDE_KING_CASTLED = 0x0400000000000000;
 
 /* Piece pinned to king mask computation */
 
@@ -109,9 +140,11 @@ void poll_selector();
 void poll_redraw_selected();
 void poll_move_gen();
 
-/* Debug functions (TODO: Can be removed if memory constrained) */
-
-void debug_bitboard(uint64_t bb);
+#ifdef DEBUG
+    /* Debug functions (TODO: Can be removed if memory constrained) */
+    void debug_bitboard(uint64_t bb);
+    const uint64_t ERROR_ERRONEOUS_CASTLE_CALL = 0xFF;
+#endif
 
 // Selector state enumeration
 enum {
@@ -130,6 +163,16 @@ enum {
     FILE_A, FILE_B, FILE_C, FILE_D,
     FILE_E, FILE_F, FILE_G, FILE_H
 };
+
+enum {
+    CASTLE_WHITE_KINGSIDE,
+    CASTLE_WHITE_QUEENSIDE,
+    CASTLE_BLACK_KINGSIDE,
+    CASTLE_BLACK_QUEENSIDE
+};
+
+// Capture castling flags in a byte variable using enums above for indexing
+uint8_t castle_flags = 0x0F;
 
 // Encapsulate state of selection modes
 struct {
@@ -275,15 +318,15 @@ int main() {
 
     cli();
 
-    const char* board_rep =
-        "rnbqkbnr"
-        "pppppppp"
-        "........"
-        "........"
-        "........"
-        "........"
-        "PPPPPPPP"
-        "RNBQKBNR";
+    // const char* board_rep =
+    //     "rnbqkbnr"
+    //     "pppppppp"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "PPPPPPPP"
+    //     "RNBQKBNR";
     
     // const char* board_rep = 
     //     "....k..."
@@ -314,6 +357,26 @@ int main() {
     //     "....R..."
     //     "........"
     //     "....K...";
+
+    // const char* board_rep = 
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "..b...q."
+    //     "........"
+    //     "...QK...";
+
+    const char* board_rep =
+        "r...k..r"
+        "pppppppp"
+        "........"
+        "........"
+        "........"
+        "........"
+        "PPPPPPPP"
+        "R...K..R";
 
     // Draw basic components
     draw_board();
@@ -411,19 +474,31 @@ void poll_selector() {
 
                 // Move piece
                 uint8_t rf_old = dp_to_rf(selector.lock_x, selector.lock_y);
-                uint8_t ty = board[selector.lock_x][selector.lock_y];
-                uint8_t own_side = (ty < B_PAWN) ? W_ALL : B_ALL;
-                uint8_t enemy_side = (own_side == W_ALL) ? B_ALL : W_ALL;
-                move_piece(piece[rf_old], piece[rf], selector.lock_x, selector.lock_y, selector.sel_x, selector.sel_y, own_side, enemy_side);
 
-                // Redraw old position
-                uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
-                draw_square(selector.lock_x, selector.lock_y, col);
-                draw_piece(selector.lock_x, selector.lock_y);
 
-                // Redraw new position
-                draw_square(selector.sel_x, selector.sel_y, HL_COL);
-                draw_piece(selector.sel_x, selector.sel_y);
+                if ( ( ( bitboards[W_KING] & piece[rf_old] ) && ( bitboards[W_ROOK] & piece[rf] ) ) ||
+                     ( ( bitboards[B_KING] & piece[rf_old] ) && ( bitboards[B_ROOK] & piece[rf] ) ) ) {
+                    castle(piece[rf]);
+                } else if ( ( ( bitboards[W_ROOK] & piece[rf_old] ) && ( bitboards[W_KING] & piece[rf] ) ) || 
+                            ( ( bitboards[B_ROOK] & piece[rf_old] ) && ( bitboards[B_KING] & piece[rf] ) ) ) {
+                    castle(piece[rf_old]);
+                } else {
+
+                    uint8_t ty = board[selector.lock_x][selector.lock_y];
+                    uint8_t own_side = (ty < B_PAWN) ? W_ALL : B_ALL;
+                    uint8_t enemy_side = (own_side == W_ALL) ? B_ALL : W_ALL;
+                    move_piece(piece[rf_old], piece[rf], selector.lock_x, selector.lock_y, selector.sel_x, selector.sel_y, own_side, enemy_side);
+
+                    // Redraw old position
+                    uint16_t col = ((selector.lock_x + selector.lock_y) & 1) ? DK_SQ_COL : LT_SQ_COL;
+                    draw_square(selector.lock_x, selector.lock_y, col);
+                    draw_piece(selector.lock_x, selector.lock_y);
+
+                    // Redraw new position
+                    draw_square(selector.sel_x, selector.sel_y, HL_COL);
+                    draw_piece(selector.sel_x, selector.sel_y);
+
+                }
 
             } else {
 
@@ -480,14 +555,16 @@ void poll_move_gen() {
             case B_KING:
 
                 open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]) &
-                             ~compute_white_attacked_minus_black_king();
+                             ~compute_white_attacked_minus_black_king() | 
+                             castle_set_black();
                 break;
 
 
             case W_KING:
 
                 open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]) &
-                             ~compute_black_attacked_minus_white_king();
+                             ~compute_black_attacked_minus_white_king() |
+                             castle_set_white();
                 break;
 
 
@@ -583,12 +660,17 @@ void apply_masks_white(uint64_t piece) {
     uint64_t pin_mask = 0;
 
     is_white_checked(bitboards[W_KING], &capture_mask, &push_mask);
-    pin_mask = compute_pin_mask_white(piece);
+    // debug_bitboard(capture_mask);
 
     if (capture_mask) {
+        if (is_double_checked(capture_mask)) {
+            open_moves = 0;
+            return;
+        }
         open_moves &= capture_mask | push_mask;
     }
 
+    pin_mask = compute_pin_mask_white(piece);
     open_moves &= pin_mask & ~bitboards[B_KING];
 
 }
@@ -600,14 +682,26 @@ void apply_masks_black(uint64_t piece) {
     uint64_t pin_mask = 0;
 
     is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
-    pin_mask = compute_pin_mask_black(piece);
 
     if (capture_mask) {
+        if (is_double_checked(capture_mask)) {
+            open_moves = 0;
+            return;
+        }
         open_moves &= capture_mask | push_mask;
     }
     
+    pin_mask = compute_pin_mask_black(piece);
     open_moves &= pin_mask & ~bitboards[W_KING];
 
+}
+
+/* Determines if a check is a double check from the capture mask */
+uint8_t is_double_checked(uint64_t capture_mask) {
+
+    // WARNING: Bit hack detects if number is a power of 2 but incorrectly
+    // recognises 0, so use AFTER ensuring there is a check.
+    return (capture_mask & (capture_mask - 1)) != 0;
 }
 
 /* Resets the colours of the current open move squares */
@@ -1295,6 +1389,196 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
     // Update lookup table
     board[px][py] = EMPTY;
     board[qx][qy] = t;
+
+}
+
+uint64_t castle_set_white() {
+
+    uint64_t castle_set = 0;
+
+    if (castle_flags & (1 << CASTLE_WHITE_KINGSIDE)) {
+
+        // Check ray from king to rook
+        uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
+
+        if (hray & WHITE_KINGSIDE_ROOK)
+            castle_set |= 1 << 7;
+    }
+
+    if (castle_flags & (1 << CASTLE_WHITE_QUEENSIDE)) {
+
+        // Check ray from king to rook
+        uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
+
+        if (hray & WHITE_QUEENSIDE_ROOK)
+            castle_set |= 1;
+    }
+
+    return castle_set;
+
+}
+
+
+uint64_t castle_set_black() {
+
+    uint64_t castle_set = 0;
+    uint64_t one = 1;
+
+    if (castle_flags & (1 << CASTLE_BLACK_KINGSIDE)) {
+
+        // Check ray from king to rook
+        uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
+
+        if (hray & BLACK_KINGSIDE_ROOK)
+            castle_set |= one << 56;
+    }
+
+    if (castle_flags & (1 << CASTLE_BLACK_QUEENSIDE)) {
+
+        uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
+        
+        if (hray & BLACK_QUEENSIDE_ROOK)
+            castle_set |= one << 63;
+    }
+
+    return castle_set;
+
+}
+
+void castle(uint64_t castle_square) {
+
+    uint64_t king_initial;
+    uint64_t king_castled;
+    uint64_t rook_initial;
+    uint64_t rook_castled;
+
+    uint8_t side;
+    uint8_t king;
+    uint8_t rook;
+
+    uint8_t x_start, x_end;
+    uint8_t y;
+
+    if (castle_square & WHITE_KINGSIDE_ROOK) {
+
+        // Set initialisation variables
+        king_initial = WHITE_KING_INITIAL;
+        king_castled = WHITE_KINGSIDE_KING_CASTLED;
+        rook_initial = WHITE_KINGSIDE_ROOK;
+        rook_castled = WHITE_KINGSIDE_ROOK_CASTLED;
+        side = W_ALL;
+        king = W_KING;
+        rook = W_ROOK;
+
+        // Update flags
+        castle_flags &= ~(1 << CASTLE_WHITE_KINGSIDE);
+        castle_flags &= ~(1 << CASTLE_WHITE_QUEENSIDE);
+
+        // Update display representation
+        board[4][7] = EMPTY;
+        board[7][7] = EMPTY;
+        board[6][7] = W_KING;
+        board[5][7] = W_ROOK;
+
+        x_start = 4;
+        x_end = 7;
+        y = 7;
+
+    } else if (castle_square & WHITE_QUEENSIDE_ROOK) {
+
+        king_initial = WHITE_KING_INITIAL;
+        king_castled = WHITE_QUEENSIDE_KING_CASTLED;
+        rook_initial = WHITE_QUEENSIDE_ROOK;
+        rook_castled = WHITE_QUEENSIDE_ROOK_CASTLED;
+        side = W_ALL;
+        king = W_KING;
+        rook = W_ROOK;
+
+        castle_flags &= ~(1 << CASTLE_WHITE_KINGSIDE);
+        castle_flags &= ~(1 << CASTLE_WHITE_QUEENSIDE);
+
+        board[4][7] = EMPTY;
+        board[0][7] = EMPTY;
+        board[2][7] = W_KING;
+        board[3][7] = W_ROOK;
+
+        x_start = 0;
+        x_end = 4;
+        y = 7;
+
+    } else if (castle_square & BLACK_KINGSIDE_ROOK) {
+
+        king_initial = BLACK_KING_INITIAL;
+        king_castled = BLACK_KINGSIDE_KING_CASTLED;
+        rook_initial = BLACK_KINGSIDE_ROOK;
+        rook_castled = BLACK_KINGSIDE_ROOK_CASTLED;
+        side = B_ALL;
+        king = B_KING;
+        rook = B_ROOK;
+
+        castle_flags &= ~(1 << CASTLE_BLACK_KINGSIDE);
+        castle_flags &= ~(1 << CASTLE_BLACK_QUEENSIDE);
+
+        board[4][0] = EMPTY;
+        board[7][0] = EMPTY;
+        board[6][0] = B_KING;
+        board[5][0] = B_ROOK;
+
+        x_start = 4;
+        x_end = 7;
+        y = 0;
+
+    } else if (castle_square & BLACK_QUEENSIDE_ROOK) {
+
+        king_initial = BLACK_KING_INITIAL;
+        king_castled = BLACK_QUEENSIDE_KING_CASTLED;
+        rook_initial = BLACK_QUEENSIDE_ROOK;
+        rook_castled = BLACK_QUEENSIDE_ROOK_CASTLED;
+        side = B_ALL;
+        king = B_KING;
+        rook = B_ROOK;
+
+        castle_flags &= ~(1 << CASTLE_BLACK_KINGSIDE);
+        castle_flags &= ~(1 << CASTLE_BLACK_QUEENSIDE);
+
+        board[4][0] = EMPTY;
+        board[0][0] = EMPTY;
+        board[2][0] = B_KING;
+        board[3][0] = B_ROOK;
+
+        x_start = 0;
+        x_end = 4;
+        y = 0;
+
+    }
+#ifdef DEBUG
+    else {
+        // SHOULDN'T HAPPEN
+        debug_bitboard(ERROR_ERRONEOUS_CASTLE_CALL);
+        return;
+    }
+#endif
+
+    // Move king
+    bitboards[king] = king_castled;
+    
+    // Move rook
+    bitboards[rook] &= ~rook_initial;
+    bitboards[rook] |= rook_castled;
+
+    // Update side board
+    bitboards[side] &= ~king_initial & ~rook_initial;
+    bitboards[side] |= king_castled | rook_castled;
+
+    // Update global board
+    bitboards[WB_ALL] = bitboards[W_ALL] | bitboards[B_ALL];
+
+    // Redraw squares
+    for (uint8_t k = x_start; k <= x_end; k++) {
+        uint16_t col = ((k + y) & 1) ? DK_SQ_COL : LT_SQ_COL;
+        draw_square(k, y, col);
+        draw_piece(k, y);
+    }
 
 }
 
