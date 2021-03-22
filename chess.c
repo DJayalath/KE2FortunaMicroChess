@@ -127,12 +127,13 @@ const uint64_t BLACK_QUEENSIDE_KING_CASTLED = 0x0400000000000000;
 uint64_t compute_pin_mask_white(uint64_t piece);
 uint64_t compute_pin_mask_black(uint64_t piece);
 
-void apply_masks_white(uint64_t piece);
-void apply_masks_black(uint64_t piece);
+uint64_t masks_white(uint64_t piece);
+uint64_t masks_black(uint64_t piece);
 
 /* Representational piece movement */
 
 void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t own_side, uint8_t enemy_side);
+uint64_t generate_moves(uint64_t piece_loc, uint8_t piece_type);
 
 /* Polling for basic game functions */
 
@@ -170,6 +171,13 @@ enum {
     CASTLE_BLACK_KINGSIDE,
     CASTLE_BLACK_QUEENSIDE
 };
+
+enum {
+    PLAYER_WHITE,
+    PLAYER_BLACK
+};
+
+uint8_t current_player = PLAYER_WHITE;
 
 // Capture castling flags in a byte variable using enums above for indexing
 uint8_t castle_flags = 0x0F;
@@ -500,6 +508,41 @@ void poll_selector() {
 
                 }
 
+                // // TODO: Analyse check-mate
+                // switch (current_player) {
+                //     uint64_t capture_mask = 0;
+                //     uint64_t push_mask = 0;
+                //     case PLAYER_WHITE:
+
+                //         // Check if black just got mated
+                //         is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
+
+                //         // Compute move set for all of black's pieces
+                //         if (capture_mask) {
+
+                //             // Compute black king's move set (can't castle during check so can be ignored)
+                //             uint64_t king_moves = compute_king_incomplete(bitboards[B_KING], bitboards[B_ALL]) & ~compute_white_attacked_minus_black_king();
+                //             uint64_t knight_moves = knight_moveable(piece[B_KNIGHT], bitboards[B_ALL]);
+                //             uint64_t pawn_moves = black_pawn_moveable(bitboards[B_PAWN]);
+                //             uint64_t bishop_moves = bishop_moveable(bitboards[B_BISHOP], bitboards[B_ALL], bitboards[WB_ALL]);
+                //             uint64_t rook_moves = rook_moveable(bitboards[B_ROOK], bitboards[B_ALL], bitboards[WB_ALL]);
+                //             uint64_t queen_moves = queen_moveable(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[WB_ALL]);
+
+                //             // Pin mask
+                //             uint64_t pin_mask = compute_pin_mask_black(knight_moves) & compute_pin_mask_black(pawn_moves) & compute_pin_mask_black()
+
+                //         }
+
+
+                //         break;
+                //     case PLAYER_BLACK:
+                //         break;
+                // }
+
+                // // Next player's turn
+                // current_player = (current_player + 1) % 2;
+
+
             } else {
 
                 // A non-open square has been selected, free the locked square
@@ -536,114 +579,7 @@ void poll_move_gen() {
 
         uint8_t rf = dp_to_rf(selector.lock_x, selector.lock_y);
 
-        uint64_t push_mask = 0;
-        uint64_t capture_mask = 0;
-        uint64_t pin_mask = 0;
-
-        // TODO: Invalidate capture mask and push mask if multiple checkers
-
-        switch(board[selector.lock_x][selector.lock_y]) {
-
-            case EMPTY:
-
-                // OK, Idiot.
-
-                open_valid = 1;
-                return;
-            
-
-            case B_KING:
-
-                open_moves = compute_king_incomplete(piece[rf], bitboards[B_ALL]) &
-                             ~compute_white_attacked_minus_black_king() | 
-                             castle_set_black();
-                break;
-
-
-            case W_KING:
-
-                open_moves = compute_king_incomplete(piece[rf], bitboards[W_ALL]) &
-                             ~compute_black_attacked_minus_white_king() |
-                             castle_set_white();
-                break;
-
-
-            case B_KNIGHT:
-
-                open_moves = knight_moveable(piece[rf], bitboards[B_ALL]);
-                apply_masks_black(piece[rf]);
-
-                break;
-
-
-            case W_KNIGHT:
-
-                open_moves = knight_moveable(piece[rf], bitboards[W_ALL]);
-                apply_masks_white(piece[rf]);
-
-                break;
-
-
-            case B_PAWN:
-
-                open_moves = black_pawn_moveable(piece[rf]);
-                apply_masks_black(piece[rf]);
-
-                break;
-
-            case W_PAWN:
-
-                open_moves = white_pawn_moveable(piece[rf]);
-                apply_masks_white(piece[rf]);
-
-                break;
-
-            case B_ROOK:
-
-                open_moves = rook_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
-                apply_masks_black(piece[rf]);
-
-                break;
-
-            case W_ROOK:
-
-                open_moves = rook_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
-                apply_masks_white(piece[rf]);
-
-                break;
-
-            case B_BISHOP:
-
-                open_moves = bishop_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
-                apply_masks_black(piece[rf]);
-
-                break;
-
-            case W_BISHOP:
-
-                open_moves = bishop_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
-                apply_masks_white(piece[rf]);
-
-                break;
-
-            case B_QUEEN:
-
-                open_moves = queen_moveable(piece[rf], bitboards[B_ALL], bitboards[WB_ALL]);
-                apply_masks_black(piece[rf]);
-
-                break;
-
-            case W_QUEEN:
-
-                open_moves = queen_moveable(piece[rf], bitboards[W_ALL], bitboards[WB_ALL]);
-                apply_masks_white(piece[rf]);
-
-                break;
-
-            default:
-                break;
-
-        }
+        open_moves = generate_moves(piece[rf], board[selector.lock_x][selector.lock_y]);
 
         // Moves have been computed, so draw them
         draw_open_moves();
@@ -653,46 +589,149 @@ void poll_move_gen() {
     }
 }
 
-void apply_masks_white(uint64_t piece) {
+uint64_t generate_moves(uint64_t piece_loc, uint8_t piece_type) {
+    switch(piece_type) {
+
+        case EMPTY:
+
+            // OK, Idiot.
+
+            open_valid = 1;
+            return 0;
+        
+
+        case B_KING:
+
+            return compute_king_incomplete(piece_loc, bitboards[B_ALL]) &
+                            ~compute_white_attacked_minus_black_king() | 
+                            castle_set_black();
+            break;
+
+
+        case W_KING:
+
+            return compute_king_incomplete(piece_loc, bitboards[W_ALL]) &
+                            ~compute_black_attacked_minus_white_king() |
+                            castle_set_white();
+            break;
+
+
+        case B_KNIGHT:
+
+            return knight_moveable(piece_loc, bitboards[B_ALL]) & masks_black(piece_loc);
+
+            break;
+
+
+        case W_KNIGHT:
+
+            return knight_moveable(piece_loc, bitboards[W_ALL]) & masks_white(piece_loc);
+
+            break;
+
+
+        case B_PAWN:
+
+            return black_pawn_moveable(piece_loc) & masks_black(piece_loc);
+
+            break;
+
+        case W_PAWN:
+
+            return white_pawn_moveable(piece_loc) & masks_white(piece_loc);
+
+            break;
+
+        case B_ROOK:
+
+            return rook_moveable(piece_loc, bitboards[B_ALL], bitboards[WB_ALL]) & masks_black(piece_loc);
+
+            break;
+
+        case W_ROOK:
+
+            return rook_moveable(piece_loc, bitboards[W_ALL], bitboards[WB_ALL]) & masks_white(piece_loc);
+
+            break;
+
+        case B_BISHOP:
+
+            return bishop_moveable(piece_loc, bitboards[B_ALL], bitboards[WB_ALL]) & masks_black(piece_loc);
+
+            break;
+
+        case W_BISHOP:
+
+            return bishop_moveable(piece_loc, bitboards[W_ALL], bitboards[WB_ALL]) & masks_white(piece_loc);
+
+            break;
+
+        case B_QUEEN:
+
+            return queen_moveable(piece_loc, bitboards[B_ALL], bitboards[WB_ALL]) & masks_black(piece_loc);
+
+            break;
+
+        case W_QUEEN:
+
+            return queen_moveable(piece_loc, bitboards[W_ALL], bitboards[WB_ALL]) & masks_white(piece_loc);
+
+            break;
+
+        default:
+            break;
+
+    }
+}
+
+uint64_t masks_white(uint64_t piece) {
 
     uint64_t capture_mask = 0;
     uint64_t push_mask = 0;
     uint64_t pin_mask = 0;
+
+    uint64_t total_mask = 0xFFFFFFFFFFFFFFFF;
 
     is_white_checked(bitboards[W_KING], &capture_mask, &push_mask);
     // debug_bitboard(capture_mask);
 
     if (capture_mask) {
         if (is_double_checked(capture_mask)) {
-            open_moves = 0;
-            return;
+            total_mask = 0;
+            return total_mask;
         }
-        open_moves &= capture_mask | push_mask;
+        total_mask &= capture_mask | push_mask;
     }
 
     pin_mask = compute_pin_mask_white(piece);
-    open_moves &= pin_mask & ~bitboards[B_KING];
+    total_mask &= pin_mask & ~bitboards[B_KING];
+
+    return total_mask;
 
 }
 
-void apply_masks_black(uint64_t piece) {
+uint64_t masks_black(uint64_t piece) {
 
     uint64_t capture_mask = 0;
     uint64_t push_mask = 0;
     uint64_t pin_mask = 0;
 
+    uint64_t total_mask = 0xFFFFFFFFFFFFFFFF;
+
     is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
 
     if (capture_mask) {
         if (is_double_checked(capture_mask)) {
-            open_moves = 0;
-            return;
+            total_mask = 0;
+            return total_mask;
         }
-        open_moves &= capture_mask | push_mask;
+        total_mask &= capture_mask | push_mask;
     }
     
     pin_mask = compute_pin_mask_black(piece);
-    open_moves &= pin_mask & ~bitboards[W_KING];
+    total_mask &= pin_mask & ~bitboards[W_KING];
+
+    return total_mask;
 
 }
 
@@ -1422,7 +1461,7 @@ uint64_t castle_set_white() {
         uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
 
         if (hray & WHITE_KINGSIDE_ROOK)
-            castle_set |= WHITE_KINGSIDE_ROOK
+            castle_set |= WHITE_KINGSIDE_ROOK;
     }
 
     if (castle_flags & (1 << CASTLE_WHITE_QUEENSIDE) && queenside_attacked == 0) {

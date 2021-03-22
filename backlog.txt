@@ -2,9 +2,12 @@
 -- Difference between ATTACKED and MOVEABLE needed for computing king pin capture masks
 
 -- TODO --
-- Castling 
-    + deny castling into/through check
-    + deny castling while in check
+- Sprites
+- Checkmate detection
+- Screens (Start, checkmate)
+- 2 Player setup
+- AI Engine
+- AI Engine setup
 - En passant blocks and captures
 - En passant discovered check
 - Bitboard caching
@@ -15,3 +18,6 @@
 -- DONE --
 - For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
 - Double check non-king move exclusion
+- Castling 
+    + deny castling into/through check
+    + deny castling while in check
