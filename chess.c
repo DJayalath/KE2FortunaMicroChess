@@ -318,15 +318,15 @@ int main() {
 
     cli();
 
-    // const char* board_rep =
-    //     "rnbqkbnr"
-    //     "pppppppp"
-    //     "........"
-    //     "........"
-    //     "........"
-    //     "........"
-    //     "PPPPPPPP"
-    //     "RNBQKBNR";
+    const char* board_rep =
+        "rnbqkbnr"
+        "pppppppp"
+        "........"
+        "........"
+        "........"
+        "........"
+        "PPPPPPPP"
+        "RNBQKBNR";
     
     // const char* board_rep = 
     //     "....k..."
@@ -368,15 +368,15 @@ int main() {
     //     "........"
     //     "...QK...";
 
-    const char* board_rep =
-        "r...k..r"
-        "pppppppp"
-        "........"
-        "........"
-        "........"
-        "....b..."
-        "........"
-        "R...K..R";
+    // const char* board_rep =
+    //     "r...k..r"
+    //     "pppppppp"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "....b..."
+    //     "........"
+    //     "R...K..R";
 
     // Draw basic components
     draw_board();
@@ -1422,7 +1422,7 @@ uint64_t castle_set_white() {
         uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
 
         if (hray & WHITE_KINGSIDE_ROOK)
-            castle_set |= 1 << 7;
+            castle_set |= WHITE_KINGSIDE_ROOK
     }
 
     if (castle_flags & (1 << CASTLE_WHITE_QUEENSIDE) && queenside_attacked == 0) {
@@ -1431,7 +1431,7 @@ uint64_t castle_set_white() {
         uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
 
         if (hray & WHITE_QUEENSIDE_ROOK)
-            castle_set |= 1;
+            castle_set |= WHITE_QUEENSIDE_ROOK;
     }
 
     return castle_set;
@@ -1455,7 +1455,7 @@ uint64_t castle_set_black() {
         uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
 
         if (hray & BLACK_KINGSIDE_ROOK)
-            castle_set |= one << 56;
+            castle_set |= BLACK_KINGSIDE_ROOK;
     }
 
     if (castle_flags & (1 << CASTLE_BLACK_QUEENSIDE) && queenside_attacked == 0) {
@@ -1463,7 +1463,7 @@ uint64_t castle_set_black() {
         uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
         
         if (hray & BLACK_QUEENSIDE_ROOK)
-            castle_set |= one << 63;
+            castle_set |= BLACK_QUEENSIDE_ROOK;
     }
 
     return castle_set;
