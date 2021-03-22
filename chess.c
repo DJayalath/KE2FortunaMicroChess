@@ -126,6 +126,13 @@ const uint64_t BLACK_QUEENSIDE_ROOK =         0x0100000000000000;
 const uint64_t BLACK_QUEENSIDE_ROOK_CASTLED = 0x0800000000000000;
 const uint64_t BLACK_QUEENSIDE_KING_CASTLED = 0x0400000000000000;
 
+/* En passant */
+
+uint64_t en_passant =  0x000000FFFF000000;
+uint64_t non_passant = 0x0000000000000000;
+uint64_t buf_passant = 0;
+uint64_t confirm_passant = 0;
+
 /* Piece pinned to king mask computation */
 
 uint64_t compute_pin_mask_white(uint64_t piece);
@@ -138,6 +145,7 @@ uint64_t masks_black(uint64_t piece);
 
 void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint8_t qy, uint8_t own_side, uint8_t enemy_side);
 uint64_t generate_moves(uint64_t piece_loc, uint8_t piece_type);
+void remove_piece(uint64_t piece_loc, uint8_t x, uint8_t y);
 
 /* Polling for basic game functions */
 
@@ -440,15 +448,15 @@ int main() {
 
     cli();
 
-    const char* board_rep =
-        "rnbqkbnr"
-        "pppppppp"
-        "........"
-        "........"
-        "........"
-        "........"
-        "PPPPPPPP"
-        "RNBQKBNR";
+    // const char* board_rep =
+    //     "rnbqkbnr"
+    //     "pppppppp"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "........"
+    //     "PPPPPPPP"
+    //     "RNBQKBNR";
     
     // const char* board_rep = 
     //     "....k..."
@@ -499,6 +507,16 @@ int main() {
     //     "....b..."
     //     "........"
     //     "R...K..R";
+
+    const char* board_rep =
+        "rnbqkbnr"
+        "pppppppp"
+        "........"
+        "........"
+        "........"
+        "........"
+        "PPPPPPPP"
+        "RNBQKBNR";
 
     sei();
 
@@ -629,6 +647,16 @@ void poll_selector() {
                     uint8_t ty = board[selector.lock_x][selector.lock_y];
                     uint8_t own_side = (ty < B_PAWN) ? W_ALL : B_ALL;
                     uint8_t enemy_side = (own_side == W_ALL) ? B_ALL : W_ALL;
+
+                    // Confirm en passant square selection
+                    if (ty == W_PAWN || ty == B_PAWN) {
+                        // Confirm destination is an en passant attack square
+                        if (piece[rf] & buf_passant) {
+                            confirm_passant = buf_passant;
+                        }
+                        buf_passant = 0;
+                    }
+
                     move_piece(piece[rf_old], piece[rf], selector.lock_x, selector.lock_y, selector.sel_x, selector.sel_y, own_side, enemy_side);
 
                     // Redraw old position
@@ -641,6 +669,12 @@ void poll_selector() {
                     draw_piece(selector.sel_x, selector.sel_y);
 
                 }
+
+                // Update en passant tables
+                en_passant &= ~non_passant;
+                non_passant |= (bitboards[B_PAWN] & mask_rank[RANK_5]) | (bitboards[W_PAWN] & mask_rank[RANK_4]);
+
+                // Check for end game
 
                 uint64_t capture_mask_black = 0;
                 uint64_t capture_mask_white = 0;
@@ -1436,8 +1470,6 @@ uint64_t white_pawn_attacked(uint64_t pawn_loc) {
     uint64_t left_att = (pawn_loc & clear_file[FILE_A]) << 7;
     uint64_t right_att = (pawn_loc & clear_file[FILE_H]) << 9;
 
-    // TODO: En passant
-
     return left_att | right_att;
 }
 
@@ -1455,7 +1487,11 @@ uint64_t white_pawn_moveable(uint64_t pawn_loc) {
     uint64_t valid_moves = one_step | two_step;
     uint64_t valid_att = white_pawn_attacked(pawn_loc) & bitboards[B_ALL];
 
-    return valid_moves | valid_att;
+    // Compute en passant attacks
+    uint64_t ep_att = white_pawn_attacked(pawn_loc & mask_rank[RANK_5]) & ((bitboards[B_PAWN] & en_passant) << 8);
+    buf_passant = ep_att;
+
+    return valid_moves | valid_att | ep_att;
 }
 
 /* Set of squares attacked by a black pawn */
@@ -1483,7 +1519,12 @@ uint64_t black_pawn_moveable(uint64_t pawn_loc) {
     uint64_t valid_moves = one_step | two_step;
     uint64_t valid_att = black_pawn_attacked(pawn_loc) & bitboards[W_ALL];
 
-    return valid_moves | valid_att;
+    // Compute en passant attacks
+    uint64_t ep_att = black_pawn_attacked(pawn_loc & mask_rank[RANK_4]) & ((bitboards[W_PAWN] & en_passant) >> 8);
+    buf_passant = ep_att;
+
+    return valid_moves | valid_att | ep_att;
+
 }
 
 /* Set of squares attacked by a rook */
@@ -1765,6 +1806,20 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
         castle_flags &= ~(1 << CASTLE_BLACK_QUEENSIDE);
     }
 
+    // Handle en passant. Holy hell.
+    if (t == W_PAWN && (q & confirm_passant)) {
+        // debug_bitboard(confirm_passant);
+        // White made en passant move
+        remove_piece(confirm_passant >> 8, qx, qy + 1);
+        confirm_passant = 0;
+    } else if (t == B_PAWN && (q & confirm_passant)) {
+        // Black made en passant move
+        remove_piece(confirm_passant << 8, qx, qy - 1);
+        confirm_passant = 0;
+    } else {
+        confirm_passant = 0;
+    }
+
     // Unset current position of moving piece
     bitboards[t] &= ~p;
     // Set new position of moving piece
@@ -1785,6 +1840,16 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
     board[px][py] = EMPTY;
     board[qx][qy] = t;
 
+}
+
+void remove_piece(uint64_t piece_loc, uint8_t x, uint8_t y) {
+    bitboards[B_PAWN] &= ~piece_loc;
+    bitboards[W_PAWN] &= ~piece_loc;
+    bitboards[B_ALL] &= ~piece_loc;
+    bitboards[W_ALL] &= ~piece_loc;
+    board[x][y] = EMPTY;
+    uint16_t col = ((x + y) & 1) ? DK_SQ_COL : LT_SQ_COL;
+    draw_square(x, y, col);
 }
 
 uint64_t castle_set_white() {
