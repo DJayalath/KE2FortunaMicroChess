@@ -57,6 +57,10 @@ void draw_piece(uint8_t x, uint8_t y);
 void draw_open_moves();
 void reset_open_moves();
 
+void draw_checkmate();
+void draw_stalemate();
+void draw_indicator();
+
 /* Helper functions */
 
 uint8_t dp_to_rf(uint8_t x, uint8_t y);
@@ -394,6 +398,9 @@ int main() {
     init_pieces(board_rep);
     draw_pieces();
 
+    // Indicate white to move
+    draw_indicator();
+
     sei();
     for (;;) {
         poll_redraw_selected();
@@ -455,22 +462,30 @@ void poll_selector() {
 
         if (selector_cached == SELECTOR_FREE) {
 
-            // The selector was free and has now been pressed, we need to lock in the selected square
-        
-            // Redraw square to show it is locked
-            draw_square(selector.sel_x, selector.sel_y, LOCK_COL);
-            draw_piece(selector.sel_x, selector.sel_y);
+            // Check the selected square is a non-enemy square
+            uint8_t square_type = board[selector.sel_x][selector.sel_y];
 
-            // Update selector state with locked square
-            selector.lock_x = selector.sel_x;
-            selector.lock_y = selector.sel_y;
-            selector.state = SELECTOR_LOCKED;
+            if ((current_player == PLAYER_WHITE && square_type >= EMPTY && square_type <= W_KING) ||
+                (current_player == PLAYER_BLACK && (square_type >= B_PAWN || square_type == EMPTY))) {
 
-            // Invalidate open move buffer
-            open_valid = 0;
+                // The selector was free and has now been pressed, we need to lock in the selected square
+            
+                // Redraw square to show it is locked
+                draw_square(selector.sel_x, selector.sel_y, LOCK_COL);
+                draw_piece(selector.sel_x, selector.sel_y);
 
-            // Redraw open move squares
-            reset_open_moves();
+                // Update selector state with locked square
+                selector.lock_x = selector.sel_x;
+                selector.lock_y = selector.sel_y;
+                selector.state = SELECTOR_LOCKED;
+
+                // Invalidate open move buffer
+                open_valid = 0;
+
+                // Redraw open move squares
+                reset_open_moves();
+
+            }
 
         } else {
 
@@ -508,39 +523,131 @@ void poll_selector() {
 
                 }
 
+                uint64_t capture_mask_black = 0;
+                uint64_t capture_mask_white = 0;
+                uint64_t push_mask = 0;
+                uint64_t move_set_black = 0;
+                uint64_t move_set_white = 0;
+
+                // Check if black just got mated
+                is_black_checked(bitboards[B_KING], &capture_mask_black, &push_mask);
+                push_mask = 0;
+                is_white_checked(bitboards[W_KING], &capture_mask_white, &push_mask);
+
+                // Compute move set for all of black's pieces
+
+                // WARNING: Risk of stack crashing into heap here. Sanity check this.
+                for (uint8_t i = B_PAWN; i <= B_KING; i++) {
+                    move_set_black |= generate_moves(bitboards[i], i);
+                }
+
+                for (uint8_t i = W_PAWN; i <= W_KING; i++) {
+                    move_set_white |= generate_moves(bitboards[i], i);
+                }
+
+                if (move_set_black == 0) {
+
+                    if (capture_mask_black) {
+                        // CHECKMATE
+                        draw_checkmate();
+                        for(;;) {}
+
+                    } else {
+                        // STALEMATE
+                        draw_stalemate();
+                        for (;;) {}
+                    }
+                    
+                }
+
+                if (move_set_white == 0) {
+
+                    if (capture_mask_white) {
+                        // CHECKMATE
+                        draw_checkmate();
+                        for(;;) {}
+
+                    } else {
+                        // STALEMATE
+                        draw_stalemate();
+                        for (;;) {}
+                    }
+                    
+                }
+
                 // // TODO: Analyse check-mate
                 // switch (current_player) {
+
                 //     uint64_t capture_mask = 0;
                 //     uint64_t push_mask = 0;
+                //     uint64_t move_set = 0;
+
                 //     case PLAYER_WHITE:
 
                 //         // Check if black just got mated
                 //         is_black_checked(bitboards[B_KING], &capture_mask, &push_mask);
 
                 //         // Compute move set for all of black's pieces
-                //         if (capture_mask) {
 
-                //             // Compute black king's move set (can't castle during check so can be ignored)
-                //             uint64_t king_moves = compute_king_incomplete(bitboards[B_KING], bitboards[B_ALL]) & ~compute_white_attacked_minus_black_king();
-                //             uint64_t knight_moves = knight_moveable(piece[B_KNIGHT], bitboards[B_ALL]);
-                //             uint64_t pawn_moves = black_pawn_moveable(bitboards[B_PAWN]);
-                //             uint64_t bishop_moves = bishop_moveable(bitboards[B_BISHOP], bitboards[B_ALL], bitboards[WB_ALL]);
-                //             uint64_t rook_moves = rook_moveable(bitboards[B_ROOK], bitboards[B_ALL], bitboards[WB_ALL]);
-                //             uint64_t queen_moves = queen_moveable(bitboards[B_QUEEN], bitboards[B_ALL], bitboards[WB_ALL]);
+                //         // WARNING: Risk of stack crashing into heap here. Sanity check this.
+                //         for (uint8_t i = B_PAWN; i <= B_KING; i++) {
+                //             move_set |= generate_moves(bitboards[i], i);
+                //         }
 
-                //             // Pin mask
-                //             uint64_t pin_mask = compute_pin_mask_black(knight_moves) & compute_pin_mask_black(pawn_moves) & compute_pin_mask_black()
+                //         if (move_set == 0) {
 
+
+                //             if (capture_mask) {
+                //                 // CHECKMATE
+                //                 draw_checkmate();
+                //                 for(;;) {}
+
+                //             } else {
+                //                 // STALEMATE
+                //                 draw_stalemate();
+                //                 for (;;) {}
+                //             }
+                            
                 //         }
 
 
                 //         break;
+
                 //     case PLAYER_BLACK:
+
+                //         // Check if white just got mated
+                //         is_white_checked(bitboards[W_KING], &capture_mask, &push_mask);
+
+                //         // Compute move set for all of black's pieces
+
+                //         // WARNING: Risk of stack crashing into heap here. Sanity check this.
+                //         for (uint8_t i = W_PAWN; i <= W_KING; i++) {
+                //             move_set |= generate_moves(bitboards[i], i);
+                //         }
+
+                //         if (move_set == 0) {
+
+
+                //             if (capture_mask) {
+                //                 // CHECKMATE
+                //                 draw_checkmate();
+                //                 for(;;) {}
+
+                //             } else {
+                //                 // STALEMATE
+                //                 draw_stalemate();
+                //                 for (;;) {}
+                //             }
+                            
+                //         }                       
+
                 //         break;
                 // }
 
-                // // Next player's turn
-                // current_player = (current_player + 1) % 2;
+                // Next player's turn
+                current_player = (current_player + 1) % 2;
+
+                draw_indicator();
 
 
             } else {
@@ -781,6 +888,75 @@ uint8_t dp_to_rf(uint8_t x, uint8_t y) {
 void rf_to_dp(uint8_t rf, uint8_t* x, uint8_t* y) {
     *y = BOARD_SIZE - 1 - rf / BOARD_SIZE;
     *x = rf % BOARD_SIZE;
+}
+
+void draw_checkmate() {
+    cli();
+
+    rectangle r;
+    r.left = 90;
+    r.right = 230;
+    r.top = 110;
+    r.bottom = 130;
+
+    fill_rectangle(r, GOLD);
+
+    r.left += 2;
+    r.right -= 2;
+    r.top += 2;
+    r.bottom -= 2;
+
+    fill_rectangle(r, BLACK);
+
+    display_string_xy("CHECKMATE", 130, 117);
+
+    sei();
+}
+
+void draw_stalemate() {
+    cli();
+
+    rectangle r;
+    r.left = 90;
+    r.right = 230;
+    r.top = 110;
+    r.bottom = 130;
+
+    fill_rectangle(r, GOLD);
+
+    r.left += 2;
+    r.right -= 2;
+    r.top += 2;
+    r.bottom -= 2;
+
+    fill_rectangle(r, BLACK);
+
+    display_string_xy("STALEMATE", 130, 117);
+
+    sei();
+}
+
+/* Draw player move indicator */
+void draw_indicator() {
+    cli();
+
+    rectangle r_prev;
+    r_prev.left = 298;
+    r_prev.right = 302;
+    r_prev.top = (current_player == PLAYER_WHITE) ? 23 : 223;
+    r_prev.bottom = (current_player == PLAYER_WHITE) ? 27 : 227;
+
+    fill_rectangle(r_prev, BLACK);
+
+    rectangle r;
+    r.left = 298;
+    r.right = 302;
+    r.top = (current_player == PLAYER_BLACK) ? 23 : 223;
+    r.bottom = (current_player == PLAYER_BLACK) ? 27 : 227;
+
+    fill_rectangle(r, WHITE);
+
+    sei();
 }
 
 /* Draw all squares on the board */
