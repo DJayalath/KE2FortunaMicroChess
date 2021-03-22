@@ -648,15 +648,6 @@ void poll_selector() {
                     uint8_t own_side = (ty < B_PAWN) ? W_ALL : B_ALL;
                     uint8_t enemy_side = (own_side == W_ALL) ? B_ALL : W_ALL;
 
-                    // Confirm en passant square selection
-                    if (ty == W_PAWN || ty == B_PAWN) {
-                        // Confirm destination is an en passant attack square
-                        if (piece[rf] & buf_passant) {
-                            confirm_passant = buf_passant;
-                        }
-                        buf_passant = 0;
-                    }
-
                     move_piece(piece[rf_old], piece[rf], selector.lock_x, selector.lock_y, selector.sel_x, selector.sel_y, own_side, enemy_side);
 
                     // Redraw old position
@@ -1805,19 +1796,13 @@ void move_piece(uint64_t p, uint64_t q, uint8_t px, uint8_t py, uint8_t qx, uint
     } else if ( (t == B_ROOK && p == BLACK_QUEENSIDE_ROOK) || (u == B_ROOK && q == BLACK_QUEENSIDE_ROOK) ) {
         castle_flags &= ~(1 << CASTLE_BLACK_QUEENSIDE);
     }
-
-    // Handle en passant. Holy hell.
-    if (t == W_PAWN && (q & confirm_passant)) {
-        // debug_bitboard(confirm_passant);
-        // White made en passant move
-        remove_piece(confirm_passant >> 8, qx, qy + 1);
-        confirm_passant = 0;
-    } else if (t == B_PAWN && (q & confirm_passant)) {
-        // Black made en passant move
-        remove_piece(confirm_passant << 8, qx, qy - 1);
-        confirm_passant = 0;
-    } else {
-        confirm_passant = 0;
+    
+    // Did an en-passant just happen? Holy hell.
+    // Check if pawn destination is a diagonal and ensure it is empty to confirm en passant.
+    if ( (t == W_PAWN) && (((p << 7) & q) | ((p << 9) & q)) && !(q & bitboards[WB_ALL]) ) {
+        remove_piece(q >> 8, qx, qy + 1);
+    } else if ( (t == B_PAWN) && (((p >> 7) & q) | ((p >> 9) & q)) && !(q & bitboards[WB_ALL]) ) {
+        remove_piece(q << 8, qx, qy - 1);
     }
 
     // Unset current position of moving piece
