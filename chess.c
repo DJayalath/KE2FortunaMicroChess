@@ -374,8 +374,8 @@ int main() {
         "........"
         "........"
         "........"
+        "....b..."
         "........"
-        "PPPPPPPP"
         "R...K..R";
 
     // Draw basic components
@@ -1396,7 +1396,12 @@ uint64_t castle_set_white() {
 
     uint64_t castle_set = 0;
 
-    if (castle_flags & (1 << CASTLE_WHITE_KINGSIDE)) {
+    uint64_t attacked = compute_black_attacked_minus_white_king();
+
+    uint64_t kingside_attacked = (piece[4] | piece[5] | piece[6]) & attacked;
+    uint64_t queenside_attacked = (piece[4] | piece[3] | piece[2]) & attacked;
+
+    if (castle_flags & (1 << CASTLE_WHITE_KINGSIDE) && kingside_attacked == 0) {
 
         // Check ray from king to rook
         uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
@@ -1405,7 +1410,7 @@ uint64_t castle_set_white() {
             castle_set |= 1 << 7;
     }
 
-    if (castle_flags & (1 << CASTLE_WHITE_QUEENSIDE)) {
+    if (castle_flags & (1 << CASTLE_WHITE_QUEENSIDE) && queenside_attacked == 0) {
 
         // Check ray from king to rook
         uint64_t hray = rook_attacked(WHITE_KING_INITIAL, bitboards[WB_ALL]);
@@ -1424,7 +1429,12 @@ uint64_t castle_set_black() {
     uint64_t castle_set = 0;
     uint64_t one = 1;
 
-    if (castle_flags & (1 << CASTLE_BLACK_KINGSIDE)) {
+    uint64_t attacked = compute_white_attacked_minus_black_king();
+
+    uint64_t kingside_attacked = (piece[60] | piece[61] | piece[62]) & attacked;
+    uint64_t queenside_attacked = (piece[60] | piece[59] | piece[58]) & attacked;
+
+    if (castle_flags & (1 << CASTLE_BLACK_KINGSIDE) && kingside_attacked == 0) {
 
         // Check ray from king to rook
         uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
@@ -1433,7 +1443,7 @@ uint64_t castle_set_black() {
             castle_set |= one << 56;
     }
 
-    if (castle_flags & (1 << CASTLE_BLACK_QUEENSIDE)) {
+    if (castle_flags & (1 << CASTLE_BLACK_QUEENSIDE) && queenside_attacked == 0) {
 
         uint64_t hray = rook_attacked(BLACK_KING_INITIAL, bitboards[WB_ALL]);
         
