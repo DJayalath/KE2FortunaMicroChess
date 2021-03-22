@@ -1,7 +1,7 @@
 -- URGENT --
--- Difference between ATTACKED and MOVEABLE needed for computing king pin capture masks
 
 -- TODO --
+- Pawn promotion
 - AI Engine
 - AI Engine setup
 - En passant blocks and captures
@@ -13,6 +13,7 @@
 
 -- DONE --
 - For piece moves, exclude enemy king from being a legal move (BUT SHOULD STILL BE ATTACKED)
+- Difference between ATTACKED and MOVEABLE needed for computing king pin capture masks
 - Double check non-king move exclusion
 - Castling 
     + deny castling into/through check
