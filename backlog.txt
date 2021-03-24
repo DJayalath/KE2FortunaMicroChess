@@ -2,10 +2,10 @@
 
 -- TODO --
 - Pawn promotion
+- Consider en passant in capture and push masks
+- En passant discovered check
 - AI Engine
 - AI Engine setup
-- En passant blocks and captures
-- En passant discovered check
 - Bitboard caching
 
 -- MAYBE --
