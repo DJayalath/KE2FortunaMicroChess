@@ -1736,6 +1736,7 @@ void is_white_checked(uint64_t king_loc, uint64_t* capture_mask, uint64_t* push_
     // Check if king were a WHITE pawn, would it attack a BLACK pawn?
     uint64_t pawn_move = white_pawn_attacked(king_loc);
     *capture_mask |= pawn_move & bitboards[B_PAWN];
+    // Add en passant-ed square to attack set
 
     // Knights
     uint64_t knight_move = knight_attacked(king_loc);
